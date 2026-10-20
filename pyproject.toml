@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mini-rag"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy",
+    "openai",
+    "pydantic",
+    "pypdf",
+    "python-dotenv",
+    "tiktoken",
+]
+
+[project.optional-dependencies]
+dev = ["mypy", "pytest", "pytest-cov", "ruff"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+src = ["src"]
+
+[tool.mypy]
+mypy_path = ["src"]

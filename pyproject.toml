@@ -10,8 +10,9 @@ dependencies = [
     "numpy",
     "openai",
     "pydantic",
+    "pydantic-settings",
     "pypdf",
-    "python-dotenv",
+    "rich-argparse",
     "tiktoken",
 ]
 
@@ -26,3 +27,8 @@ src = ["src"]
 
 [tool.mypy]
 mypy_path = ["src"]
+plugins = ["pydantic.mypy"]
+
+[tool.ruff.lint]
+# still reported, but never auto-removed on save
+unfixable = ["F401"]

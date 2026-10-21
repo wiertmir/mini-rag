@@ -1,0 +1,15 @@
+# mini-rag settings.
+# Precedence (highest first): CLI arguments, environment variables, .env,
+# this file. Use MINI_RAG_CONFIG=<path> to load a different file.
+# Top-level keys are shared by all commands; a command's table overrides them.
+
+data_dir = "data"
+tokenizer_model = "text-embedding-3-small"
+log_folder = "logs"
+
+[ingest]
+manifest = "data/documents.csv"
+pdf_dir = "data/pdfs"
+output = "index/chunks.jsonl"
+chunk_size = 800
+chunk_overlap = 150

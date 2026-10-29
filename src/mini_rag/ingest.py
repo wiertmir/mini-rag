@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from rich_struct import print_obj
 
 from mini_rag.config import HelpFormatter, IngestConfig, load_config
+from mini_rag.pdf_parsers import PdfDocument, TextExtractionConfig, extract_text
 
 rich_struct.log.configure(file=True)
 log = rich_struct.log.get_logger()
@@ -26,14 +27,6 @@ class Manifest(BaseModel):
     )
 
 
-class PdfPage(BaseModel):
-    text: str
-
-
-class PdfDocument(BaseModel):
-    pages: list[PdfPage]
-
-
 def read_manifest_file(manifest_path: Path) -> list[Manifest]:
     log.info("Reading manifest file {}", manifest_path)
     with open(manifest_path, mode="r", encoding="utf-8") as csv_file:
@@ -44,7 +37,8 @@ def read_manifest_file(manifest_path: Path) -> list[Manifest]:
 def parse_pdf_text(doc_id: str, parent_folder: Path) -> PdfDocument:
     pdf_path = parent_folder / (doc_id + ".pdf")
     log.info("Starting to parse {}", pdf_path)
-    return PdfDocument(pages=[])
+    pdf_extract_config = TextExtractionConfig()
+    return extract_text(pdf_path, pdf_extract_config)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -57,7 +51,13 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     manifests = read_manifest_file(config.manifest)
 
-    docs = [parse_pdf_text(manifest.id, config.pdf_dir) for manifest in manifests]
+    docs = [parse_pdf_text(manifest.id, config.pdf_dir) for manifest in manifests[:2]]
+
+    rich_struct.print_obj(docs[0].pages[0], apply_newlines=True)
+    rich_struct.print_obj(docs[0].pages[1], apply_newlines=True)
+    rich_struct.print_obj(docs[0].pages[2], apply_newlines=True)
+    rich_struct.print_obj(docs[0].pages[3], apply_newlines=True)
+    rich_struct.print_obj(docs[0].pages[4], apply_newlines=True)
 
 
 if __name__ == "__main__":

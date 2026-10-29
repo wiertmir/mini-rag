@@ -21,6 +21,9 @@ dev = ["mypy", "pytest", "pytest-cov", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "acceptance: black-box checks for a completed school task",
+]
 
 [tool.ruff]
 src = ["src"]
@@ -30,5 +33,6 @@ mypy_path = ["src"]
 plugins = ["pydantic.mypy"]
 
 [tool.ruff.lint]
+ignore = ["PLE1205"]
 # still reported, but never auto-removed on save
 unfixable = ["F401"]

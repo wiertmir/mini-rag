@@ -53,12 +53,6 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     docs = [parse_pdf_text(manifest.id, config.pdf_dir) for manifest in manifests[:2]]
 
-    rich_struct.print_obj(docs[0].pages[0], apply_newlines=True)
-    rich_struct.print_obj(docs[0].pages[1], apply_newlines=True)
-    rich_struct.print_obj(docs[0].pages[2], apply_newlines=True)
-    rich_struct.print_obj(docs[0].pages[3], apply_newlines=True)
-    rich_struct.print_obj(docs[0].pages[4], apply_newlines=True)
-
 
 if __name__ == "__main__":
     main()

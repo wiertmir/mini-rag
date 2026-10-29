@@ -11,8 +11,10 @@ dependencies = [
     "openai",
     "pydantic",
     "pydantic-settings",
+    "pymupdf",
     "pypdf",
     "rich-argparse",
+    "rich-struct",
     "tiktoken",
 ]
 

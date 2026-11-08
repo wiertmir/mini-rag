@@ -2,3 +2,4 @@ data/pdfs/
 .env
 **/__pycache__/
 logs/
+index/

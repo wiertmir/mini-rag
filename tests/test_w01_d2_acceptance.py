@@ -235,12 +235,10 @@ def test_both_required_chunking_strategies_are_recorded_and_compared(
 
     manifest_800 = _read_json(runs_800[0].manifest)
     manifest_600 = _read_json(run_600.manifest)
-    text_800 = " ".join(_walk_strings(manifest_800))
-    text_600 = " ".join(_walk_strings(manifest_600))
-    for expected in ("800", "120"):
-        assert expected in text_800, f"800/120 manifest does not record {expected}"
-    for expected in ("600", "80"):
-        assert expected in text_600, f"600/80 manifest does not record {expected}"
+    assert manifest_800["parameters"]["chunk_size"] == 800
+    assert manifest_800["parameters"]["chunk_overlap"] == 120
+    assert manifest_600["parameters"]["chunk_size"] == 600
+    assert manifest_600["parameters"]["chunk_overlap"] == 80
 
 
 def test_configured_overlap_is_present_between_consecutive_chunks(

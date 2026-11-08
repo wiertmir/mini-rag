@@ -1,14 +1,16 @@
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-import re
 from typing import NotRequired, TypedDict, cast
 
-from pydantic import BaseModel
 import pymupdf
 import rich_struct.log
+from pydantic import BaseModel
 
+from mini_rag.models import Manifest
 
 log = rich_struct.log.get_logger()
+
 
 class PdfPage(BaseModel):
     number: int
@@ -16,7 +18,12 @@ class PdfPage(BaseModel):
 
 
 class PdfDocument(BaseModel):
+    id: str
+    source_path: str
     pages: list[PdfPage]
+    title: str
+    collection: str
+
 
 @dataclass(frozen=True)
 class TextExtractionConfig:
@@ -28,6 +35,7 @@ class TextExtractionConfig:
     tables are always omitted. skip_elements accepts additional layout labels,
     such as "section-header" or "list-item".
     """
+
     skip_headers: bool = True
     skip_footers: bool = True
     skip_page_numbers: bool = True
@@ -74,18 +82,24 @@ class _TextPage(TypedDict):
 def _normalize(text: str) -> str:
     return " ".join(text.replace("\x08", "").split())
 
+
 def _section_depth(text: str) -> int:
     match = re.match(r"^(\d+(?:\.\d+)*)\.?\s+\S", text)
     return len(match[1].split(".")) if match else 1
+
+
+def normalize_text(text: str) -> str:
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    normalized = "\n".join(lines)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
 
 
 def _read_regions(page: pymupdf.Page) -> list[_TextRegion]:
     page.get_layout()
     if page.layout_information is None:
         raise RuntimeError("PyMuPDF4LLM layout analysis is unavailable.")
-    text_page = cast(
-        _TextPage, page.get_text("dict", flags=pymupdf.TEXTFLAGS_TEXT)
-    )
+    text_page = cast(_TextPage, page.get_text("dict", flags=pymupdf.TEXTFLAGS_TEXT))
     lines = [
         line
         for block in text_page["blocks"]
@@ -139,13 +153,18 @@ def _read_regions(page: pymupdf.Page) -> list[_TextRegion]:
         ):
             kind = "caption"
 
+        cleared_txt = normalize_text(text)
         regions.append(
-            _TextRegion(text, kind, rect, bool(spans[0]["flags"] & 16), decorative)
+            _TextRegion(
+                cleared_txt, kind, rect, bool(spans[0]["flags"] & 16), decorative
+            )
         )
     return regions
-    
 
-def extract_text(pdf_path: Path, config: TextExtractionConfig) -> PdfDocument:
+
+def extract_text(
+    pdf_path: Path, config: TextExtractionConfig, manifest: Manifest
+) -> PdfDocument:
     """
     Uses native text and layout classification only: no Markdown serialization,
     asset rendering/export, table-cell extraction or explicit drawing traversal.
@@ -154,13 +173,20 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig) -> PdfDocument:
     pages: list[PdfPage] = []
 
     excluded: set[str] = {"picture", "formula", "table"} | set(config.skip_elements)
-    excluded.update(kind for enabled, kind in ((config.skip_headers, "page-header"),
-                                               (config.skip_footers, "page-footer"),
-                                               (config.skip_captions, "caption"),
-                                               (config.skip_footnotes, "footnote"))
-                          if enabled)
-    skipped_sections: set[str] = {_normalize(name).casefold() for name in config.skip_sections}
-    
+    excluded.update(
+        kind
+        for enabled, kind in (
+            (config.skip_headers, "page-header"),
+            (config.skip_footers, "page-footer"),
+            (config.skip_captions, "caption"),
+            (config.skip_footnotes, "footnote"),
+        )
+        if enabled
+    )
+    skipped_sections: set[str] = {
+        _normalize(name).casefold() for name in config.skip_sections
+    }
+
     previous: _TextRegion | None = None
     previous_page = -1
     skipped_depth: int | None = None
@@ -168,19 +194,24 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig) -> PdfDocument:
 
     with pymupdf.open(pdf_path) as pdf_doc:
         page_numbers: tuple[int, ...] = (
-            tuple(range(1, len(pdf_doc) + 1)) if config.pages is None
-            else config.pages
+            tuple(range(1, len(pdf_doc) + 1)) if config.pages is None else config.pages
         )
-        if any(isinstance(number, bool)
-                    or not isinstance(number, int)
-                    or not 1 <= number <= len(pdf_doc)
-               for number in page_numbers):
-            raise ValueError(f"pages must contain one-based integers from 1 to {len(pdf_doc)}")
+        if any(
+            isinstance(number, bool)
+            or not isinstance(number, int)
+            or not 1 <= number <= len(pdf_doc)
+            for number in page_numbers
+        ):
+            raise ValueError(
+                f"pages must contain one-based integers from 1 to {len(pdf_doc)}"
+            )
 
         if tuple(sorted(set(page_numbers))) != page_numbers:
             raise ValueError("pages must be unique and in ascending order")
-        
+
         for page_number in page_numbers:
+            allowed_empty_lines = 0
+
             page = pdf_doc[page_number - 1]
             parts: list[str] = []
 
@@ -188,7 +219,8 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig) -> PdfDocument:
             log.info("Page: {}, found {} textable regions", page_number, len(regions))
 
             if config.skip_contents_pages and any(
-                region.kind in {"title", "section-header"} and region.text.casefold() in {"contents", "table of contents"}
+                region.kind in {"title", "section-header"}
+                and region.text.casefold() in {"contents", "table of contents"}
                 for region in regions
             ):
                 log.debug("Skipping page {}", page_number)
@@ -225,9 +257,11 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig) -> PdfDocument:
                     continue
 
                 if previous is not None:
-                    boundary = page_number != previous_page or abs(
-                        region.rect.x0 - previous.rect.x0
-                    ) >= page.rect.width * 0.3
+                    boundary = (
+                        page_number != previous_page
+                        or abs(region.rect.x0 - previous.rect.x0)
+                        >= page.rect.width * 0.3
+                    )
                     join = (
                         boundary
                         and config.join_column_and_page_continuations
@@ -236,11 +270,25 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig) -> PdfDocument:
                         and not region.bold_start
                         and page_number <= previous_page + 1
                     )
-                    parts.append("\n" if join else "\n\n")
-                parts.append(region.text)
+                    if not join and allowed_empty_lines > 0:
+                        parts.append("")
+                        allowed_empty_lines -= 1
+
+                if region.text:
+                    parts.append(region.text)
+                    allowed_empty_lines = 1
+                elif allowed_empty_lines > 0:
+                    parts.append(region.text)
+                    allowed_empty_lines -= 1
                 previous, previous_page = region, page_number
 
-            page = PdfPage(number=page_number, text="".join(parts))
+            page = PdfPage(number=page_number, text="\n".join(parts))
             pages.append(page)
-    
-    return PdfDocument(pages=pages)
+
+    return PdfDocument(
+        id=pdf_path.stem,
+        source_path=str(pdf_path),
+        pages=pages,
+        title=manifest.title,
+        collection=manifest.collection,
+    )

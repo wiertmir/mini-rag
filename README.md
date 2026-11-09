@@ -7,9 +7,10 @@
 
   ### 1. Set up the environment
 
-  The project requires Python 3.13.
+  The project supports Python 3.13+ and uses Python 3.13.15 for local development.
 
   ```bash
+  pyenv install -s 3.13.15
   pyenv local 3.13.15
 
   python -m pip install --upgrade pip
@@ -77,6 +78,13 @@
   produces `index/chunks_800_120.jsonl` and `index/ingest_manifest_800_120.json`.
   Different chunking settings can share the same output directory.
   Configure it with `--output-dir`, `OUTPUT_DIR`, or `output_dir` in `[ingest]`.
+
+  The storage readers `mini_rag.storage.read_chunks` and `read_chunks_async`
+  raise `ChunkParseError` for malformed JSON and `ChunkValidationError` for
+  records that do not satisfy the chunk schema. Both inherit from
+  `ChunkReadError`, expose `path` and the 1-based `line_no`, and preserve the
+  original Pydantic exception as their cause. Blank lines are invalid JSON;
+  filesystem errors propagate unchanged.
 
   ### Generate embeddings
 

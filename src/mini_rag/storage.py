@@ -12,21 +12,6 @@ rich_struct.log.configure(file=True)
 logger = rich_struct.log.get_logger()
 
 
-class ChunkReadError(ValueError):
-    def __init__(self, path: Path, line_no: int, reason: str) -> None:
-        self.path = path
-        self.line_no = line_no
-        super().__init__(f"{path}: line {line_no}: {reason}")
-
-
-class ChunkParseError(ChunkReadError):
-    """A JSONL line cannot be parsed as JSON."""
-
-
-class ChunkValidationError(ChunkReadError):
-    """A JSONL record does not satisfy the Chunk schema."""
-
-
 async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
     """Read chunks, raising a ChunkReadError with the failing line number."""
     logger.info("Reading chunks from {}", path)
@@ -48,10 +33,25 @@ async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
                 yield chunk
 
 
-async def _collect_chunks(path: Path) -> list[Chunk]:
-    return [chunk async for chunk in read_chunks_async(path)]
-
-
 def read_chunks(path: Path) -> list[Chunk]:
     """Read all chunks, propagating line-numbered parsing and validation errors."""
     return asyncio.run(_collect_chunks(path))
+
+
+class ChunkReadError(ValueError):
+    def __init__(self, path: Path, line_no: int, reason: str) -> None:
+        self.path = path
+        self.line_no = line_no
+        super().__init__(f"{path}: line {line_no}: {reason}")
+
+
+class ChunkParseError(ChunkReadError):
+    """A JSONL line cannot be parsed as JSON."""
+
+
+class ChunkValidationError(ChunkReadError):
+    """A JSONL record does not satisfy the Chunk schema."""
+
+
+async def _collect_chunks(path: Path) -> list[Chunk]:
+    return [chunk async for chunk in read_chunks_async(path)]

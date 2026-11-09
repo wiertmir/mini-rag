@@ -46,12 +46,6 @@ class Config(BaseSettings):
         cli_kebab_case=True,
     )
 
-    data_dir: Path = Field(
-        default=Path("data"), description="directory with the input data"
-    )
-    tokenizer_model: str = Field(
-        default="text-embedding-3-small", description="model used to tokenize text"
-    )
     # Not shown in --help, but still settable via CLI, env or config file.
     log_folder: CliSuppress[Path] = Field(
         default=Path("logs"), description="directory for log files"
@@ -98,11 +92,28 @@ class IngestConfig(Config):
         default=120, description="overlap between chunks in tokens"
     )
 
+    tokenizer_model: str = Field(
+        default="text-embedding-3-small", description="model used to tokenize text"
+    )
+
     @model_validator(mode="after")
     def _check_overlap(self) -> Self:
         if not 0 <= self.chunk_overlap < self.chunk_size:
             raise ValueError("chunk_overlap must be >= 0 and < chunk_size")
         return self
+
+
+class EmbedConfig(Config):
+    model_config = SettingsConfigDict(toml_table_header=("embed",))
+
+    chunks: Path = Field(description="input JSONL file with chunks")
+    output_dir: Path = Field(
+        default=Path("index"), description="directory for the index and manifest"
+    )
+    embedding_model: str = Field(
+        default="text-embedding-3-small", description="embedding model"
+    )
+    batch_size: int = Field(default=256, description="number of texts per API request")
 
 
 def load_config[C: Config](
@@ -115,7 +126,22 @@ def load_config[C: Config](
     Pass ``parser`` to add the settings options to a program's own parser.
     ``--help`` shows the values resolved from env vars / config file as defaults.
     """
-    resolved = config_cls()
+    parser = parser or argparse.ArgumentParser(formatter_class=HelpFormatter)
+    resolution_fields: dict[str, Any] = {}
+    for name, field in config_cls.model_fields.items():
+        if field.is_required():
+            if field.annotation is None:
+                raise TypeError(f"Required setting {name!r} has no type annotation")
+            info = copy.copy(field)
+            info.default = None
+            resolution_fields[name] = (field.annotation | None, info)
+    resolution_model = create_model(
+        config_cls.__name__, __base__=config_cls, **resolution_fields
+    )
+    try:
+        resolved = resolution_model()
+    except ValidationError as exc:
+        parser.error(str(exc))
 
     # Help text takes defaults from the model fields, so build a CLI-only model
     # whose defaults are the already resolved (env / file) values.
@@ -123,14 +149,15 @@ def load_config[C: Config](
     for name, field in config_cls.model_fields.items():
         # Copy to keep metadata such as CliSuppress; only the default changes.
         info = copy.copy(field)
-        info.default = getattr(resolved, name)
-        info.default_factory = None
+        value = getattr(resolved, name)
+        if not field.is_required() or value is not None:
+            info.default = value
+            info.default_factory = None
         fields[name] = (field.annotation, info)
     cli_model = cast(
         type[BaseSettings],
         create_model(config_cls.__name__, __base__=config_cls, **fields),
     )
-    parser = parser or argparse.ArgumentParser(formatter_class=HelpFormatter)
     cli_source: CliSettingsSource[Any] = CliSettingsSource(
         cli_model, root_parser=parser, cli_parse_args=False
     )

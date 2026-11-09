@@ -88,6 +88,11 @@
 
   ### Generate embeddings
 
+  Embedding settings use the `[embed]` TOML table. `chunks` is required and has
+  no default; provide it with `--chunks`, `CHUNKS`, or the TOML table.
+  Defaults are `output_dir = "index"`,
+  `embedding_model = "text-embedding-3-small"`, and `batch_size = 256`.
+
   ```bash
   python -m mini_rag.embed \
     --chunks index/chunks_800_120.jsonl \

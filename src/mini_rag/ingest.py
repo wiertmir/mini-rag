@@ -88,6 +88,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         prog="python -m mini_rag.ingest",
         description=__doc__,
         formatter_class=HelpFormatter,
+        allow_abbrev=False,
     )
     config = load_config(IngestConfig, argv, parser)
 
@@ -97,7 +98,6 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     docs_no = 0
     total_pages = 0
-    total_chunks = 0
 
     doc_stats = []
 
@@ -129,11 +129,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             else:
                 chunk_result.extend(chunks)
                 total_pages += stats["pages"]
-                total_chunks += stats["chunks"]
             doc_stats.append(stats)
 
-    save_chunk_results(config, chunk_result)
-    save_ingest_manifest(config, docs_no, total_pages, total_chunks, doc_stats, errors)
+    save_ingest_manifest(config, docs_no, total_pages, chunk_result, doc_stats, errors)
     if errors:
         raise SystemExit(1)
 
@@ -152,11 +150,15 @@ def save_ingest_manifest(
     config: IngestConfig,
     docs: int,
     pages: int,
-    chunks: int,
+    chunks: list[Chunk],
     doc_stats: list[DocumentStats],
     errors: list[str],
 ) -> None:
-    manifest_out_path = config.output.parent / "ingest_manifest.json"
+    save_chunk_results(config, chunks)
+    manifest_out_path = (
+        config.output_dir
+        / f"ingest_manifest_{config.chunk_size}_{config.chunk_overlap}.json"
+    )
     log.info("Writing ingest manifest to {}", manifest_out_path)
 
     manifest = {
@@ -168,7 +170,7 @@ def save_ingest_manifest(
         "summary": {
             "documents": docs,
             "pages": pages,
-            "chunks": chunks,
+            "chunks": len(chunks),
             "errors": len(errors),
         },
         "documents": doc_stats,
@@ -180,9 +182,12 @@ def save_ingest_manifest(
 
 
 def save_chunk_results(config: IngestConfig, chunk_result: list[Chunk]) -> None:
-    log.info("Writing final output to {}", config.output)
-    config.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(config.output, "w", encoding="utf-8") as chunks_output:
+    output_path = (
+        config.output_dir / f"chunks_{config.chunk_size}_{config.chunk_overlap}.jsonl"
+    )
+    log.info("Writing final output to {}", output_path)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as chunks_output:
         chunk_iter = (f"{chunk.model_dump_json()}\n" for chunk in chunk_result)
         chunks_output.writelines(chunk_iter)
 

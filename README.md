@@ -66,16 +66,23 @@
   python -m mini_rag.ingest \
     --manifest data/documents.csv \
     --pdf-dir data/pdfs \
-    --output index/chunks.jsonl \
+    --output-dir index \
     --chunk-size 800 \
     --chunk-overlap 120
   ```
+
+  Ingest creates the output directory if needed and writes
+  `chunks_<chunk_size>_<chunk_overlap>.jsonl` and
+  `ingest_manifest_<chunk_size>_<chunk_overlap>.json` there. The command above
+  produces `index/chunks_800_120.jsonl` and `index/ingest_manifest_800_120.json`.
+  Different chunking settings can share the same output directory.
+  Configure it with `--output-dir`, `OUTPUT_DIR`, or `output_dir` in `[ingest]`.
 
   ### Generate embeddings
 
   ```bash
   python -m mini_rag.embed \
-    --chunks index/chunks.jsonl \
+    --chunks index/chunks_800_120.jsonl \
     --output-dir index
   ```
 

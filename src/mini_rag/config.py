@@ -90,8 +90,8 @@ class IngestConfig(Config):
     pdf_dir: Path = Field(
         default=Path("data/pdfs"), description="directory with PDF files"
     )
-    output: Path = Field(
-        default=Path("index/chunks.jsonl"), description="output JSONL file with chunks"
+    output_dir: Path = Field(
+        default=Path("index"), description="directory for chunks and ingest manifest"
     )
     chunk_size: int = Field(default=800, description="chunk size in tokens")
     chunk_overlap: int = Field(

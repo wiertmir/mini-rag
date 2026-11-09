@@ -94,8 +94,7 @@ def _run_ingest(
     chunk_overlap: int,
     require_success: bool = True,
 ) -> IngestRun:
-    run_dir.mkdir(parents=True, exist_ok=True)
-    output = run_dir / "chunks.jsonl"
+    output = run_dir / f"chunks_{chunk_size}_{chunk_overlap}.jsonl"
     completed = subprocess.run(
         [
             sys.executable,
@@ -105,8 +104,8 @@ def _run_ingest(
             str(manifest),
             "--pdf-dir",
             str(pdf_dir),
-            "--output",
-            str(output),
+            "--output-dir",
+            str(run_dir),
             "--chunk-size",
             str(chunk_size),
             "--chunk-overlap",
@@ -125,7 +124,7 @@ def _run_ingest(
         )
     return IngestRun(
         output=output,
-        manifest=run_dir / "ingest_manifest.json",
+        manifest=run_dir / f"ingest_manifest_{chunk_size}_{chunk_overlap}.json",
         completed=completed,
     )
 
@@ -220,7 +219,7 @@ def test_same_configuration_is_byte_for_byte_deterministic(
     first_digest = hashlib.sha256(first.output.read_bytes()).hexdigest()
     second_digest = hashlib.sha256(second.output.read_bytes()).hexdigest()
     assert first_digest == second_digest, (
-        "Two identical ingest runs produced different chunks.jsonl files"
+        "Two identical ingest runs produced different chunk files"
     )
 
 

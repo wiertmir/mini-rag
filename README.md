@@ -31,6 +31,15 @@
   The mini_rag package works
   ```
 
+  ### Run the embedding tests
+
+  ```bash
+  python -m pytest tests/test_embed.py
+  ```
+
+  Async tests run automatically with `pytest-asyncio`, included in the dev
+  dependencies. The embedding tests use a fake client and make no API calls.
+
   ### 3. Prepare the data
 
   The `documents.csv`, `questions.jsonl`, and `download_pdfs.py` files should

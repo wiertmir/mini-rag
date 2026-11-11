@@ -1,0 +1,73 @@
+name: Acceptance
+
+# Black-box acceptance tests for completed learning-plan milestones.
+# Run manually: Actions -> Acceptance -> Run workflow (or: gh workflow run acceptance.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      select:
+        description: 'pytest -k expression (e.g. "w01_d2"); empty = all acceptance tests'
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: Acceptance tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - name: Restore IPCC corpus cache
+        id: corpus
+        uses: actions/cache@v6
+        with:
+          path: data/pdfs
+          key: ipcc-pdfs-${{ hashFiles('data/documents.csv') }}
+
+      - name: Download IPCC corpus
+        if: steps.corpus.outputs.cache-hit != 'true'
+        run: python data/download_pdfs.py
+
+      # download_pdfs.py never fails, and the acceptance tests skip when PDFs
+      # are missing. Fail loudly instead of reporting a green run full of skips.
+      - name: Verify corpus is complete
+        run: |
+          python - <<'EOF'
+          import csv, pathlib, sys
+          rows = list(csv.DictReader(open("data/documents.csv", encoding="utf-8", newline="")))
+          pdfs = pathlib.Path("data/pdfs")
+          missing = [r["id"] for r in rows
+                     if not (pdfs / f"{r['id']}.pdf").is_file()
+                     or (pdfs / f"{r['id']}.pdf").read_bytes()[:4] != b"%PDF"]
+          if missing:
+              sys.exit(f"Missing or invalid PDFs: {missing}")
+          print(f"Corpus OK: {len(rows)} PDFs")
+          EOF
+
+      - name: Pytest (acceptance only)
+        env:
+          # Needed by later milestones (embeddings / answers). Add it as a repo secret when required.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SELECT: ${{ inputs.select }}
+        run: |
+          args=(-m acceptance -ra -v)
+          if [ -n "$SELECT" ]; then args+=(-k "$SELECT"); fi
+          python -m pytest "${args[@]}"

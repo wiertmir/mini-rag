@@ -49,6 +49,28 @@
   Async tests run automatically with `pytest-asyncio`, included in the dev
   dependencies. The embedding tests use a fake client and make no API calls.
 
+  ### Continuous integration
+
+  - **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and every
+    pull request: `ruff check`, `ruff format --check`, `mypy src`, and
+    `pytest -m "not acceptance"` on Python 3.12 and 3.13. Reproduce locally:
+
+    ```bash
+    python -m ruff check . && python -m ruff format --check . \
+      && python -m mypy src && python -m pytest -q -m "not acceptance"
+    ```
+
+  - **Acceptance** (`.github/workflows/acceptance.yml`) runs the slow black-box
+    tests (marker `acceptance`) and is started manually at milestones:
+
+    ```bash
+    gh workflow run acceptance.yml              # all acceptance tests
+    gh workflow run acceptance.yml -f select=w01_d2
+    ```
+
+    It downloads (and caches) the IPCC corpus and fails if any PDF is missing,
+    so missing data cannot turn into a green run full of skipped tests.
+
   ### 3. Prepare the data
 
   The `documents.csv`, `questions.jsonl`, and `download_pdfs.py` files should

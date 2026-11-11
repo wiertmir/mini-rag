@@ -16,7 +16,7 @@ dependencies = [
     "pymupdf",
     "pypdf",
     "rich-argparse",
-    "rich-struct",
+    "rich-struct[log]",
     "tiktoken",
 ]
 

@@ -202,8 +202,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     logger.info("Starting the embed app")
 
-    client = AsyncOpenAI()
-    asyncio.run(run_embed(config, client))
+    async def run() -> None:
+        async with AsyncOpenAI() as client:
+            await run_embed(config, client)
+
+    asyncio.run(run())
 
 
 if __name__ == "__main__":

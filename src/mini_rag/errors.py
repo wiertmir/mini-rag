@@ -19,5 +19,6 @@ class ChunkValidationError(ChunkReadError):
 class ManifestError(Exception):
     """There is something wrong with Manifest"""
 
+
 class InconsistentManifestError(ManifestError):
     """There is something wrong with Manifest"""

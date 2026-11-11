@@ -24,26 +24,42 @@ def embedding_manifest() -> EmbeddingManifest:
     )
 
 
-async def iter_embeddings(rows: list[list[float]]) -> AsyncIterator[list[float]]:
-    for row in rows:
-        yield row
-
-
 def test_normalize_produces_unit_row_norms() -> None:
-    result = normalize(iter_embeddings([[3.0, 4.0], [5.0, 12.0]]))
+    result = normalize(np.array([[3.0, 4.0], [5.0, 12.0]], dtype=np.float32))
 
     assert np.allclose(np.linalg.norm(result, axis=1), 1.0)
 
 
 def test_normalize_preserves_direction() -> None:
-    result = normalize(iter_embeddings([[3.0, 4.0], [-4.0, 3.0]]))
+    result = normalize(np.array([[3.0, 4.0], [-4.0, 3.0]], dtype=np.float32))
 
     assert np.allclose(result, [[0.6, 0.8], [-0.8, 0.6]])
 
 
 def test_normalize_rejects_zero_row() -> None:
-    with pytest.raises(ValueError, match="Zero"):
-        normalize(iter_embeddings([[3.0, 4.0], [0.0, 0.0]]))
+    with pytest.raises(ValueError, match=r"Zero norms at rows \(1-based\): \[2\]"):
+        normalize(np.array([[3.0, 4.0], [0.0, 0.0]], dtype=np.float32))
+
+
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf, 0.0])
+def test_normalize_reports_all_invalid_row_numbers(value: float) -> None:
+    matrix = np.array(
+        [[value, 0.0], [3.0, 4.0], [value, 0.0], [5.0, 12.0]],
+        dtype=np.float32,
+    )
+
+    with pytest.raises(ValueError, match=r"rows \(1-based\): \[1, 3\]"):
+        normalize(matrix)
+
+
+def test_normalize_reports_mixed_invalid_row_numbers() -> None:
+    matrix = np.array(
+        [[3.0, 4.0], [np.nan, 1.0], [0.0, 0.0], [1.0, np.inf]],
+        dtype=np.float32,
+    )
+
+    with pytest.raises(ValueError, match=r"rows \(1-based\): \[2, 3, 4\]"):
+        normalize(matrix)
 
 
 def test_save_index_matrix_round_trip(
@@ -68,6 +84,37 @@ def test_save_index_manifest_round_trip(
     file_text = (tmp_path / "embedding_manifest.json").read_text(encoding="utf-8")
 
     assert EmbeddingManifest.model_validate_json(file_text) == embedding_manifest
+
+
+@pytest.mark.parametrize("dtype", ["float64", "float16", "int32", "complex64"])
+def test_save_index_rejects_non_float32_before_creating_output(
+    tmp_path: Path, embedding_manifest: EmbeddingManifest, dtype: str
+) -> None:
+    matrix = np.array([[1, 0], [0, 1]], dtype=dtype)
+    output_dir = tmp_path / "index"
+
+    with pytest.raises(TypeError, match=f"Expected float32 matrix, got {dtype}"):
+        save_index(output_dir, matrix, embedding_manifest)
+
+    assert not output_dir.exists()
+
+
+def test_save_index_rejects_float64_without_overwriting_files(
+    tmp_path: Path, embedding_manifest: EmbeddingManifest
+) -> None:
+    matrix = np.array([[0.6, 0.8], [-0.8, 0.6]], dtype=np.float32)
+    save_index(tmp_path, matrix, embedding_manifest)
+    embeddings_path = tmp_path / "embeddings.npy"
+    manifest_path = tmp_path / "embedding_manifest.json"
+    original_embeddings = embeddings_path.read_bytes()
+    original_manifest = manifest_path.read_bytes()
+
+    with pytest.raises(TypeError, match="Expected float32 matrix, got float64"):
+        # Deliberately violate the dtype contract to test runtime validation.
+        save_index(tmp_path, matrix.astype(np.float64), embedding_manifest)  # pyright: ignore[reportArgumentType]
+
+    assert embeddings_path.read_bytes() == original_embeddings
+    assert manifest_path.read_bytes() == original_manifest
 
 
 class FakeClient:

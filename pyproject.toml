@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "mini-rag"
 version = "0.1.0"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "aiofiles",
     "asyncstdlib",
@@ -32,9 +32,11 @@ markers = [
 
 [tool.ruff]
 src = ["src"]
+target-version = "py312"
 
 [tool.mypy]
 mypy_path = ["src"]
+python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [tool.ruff.lint]

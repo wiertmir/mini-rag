@@ -7,7 +7,7 @@
 
   ### 1. Set up the environment
 
-  The project supports Python 3.11 through 3.13 and uses Python 3.13.15 for
+  The project supports Python 3.12 and 3.13 (`>=3.12,<3.14`) and uses Python 3.13.15 for
   local development. PyMuPDF has compatibility issues with Python 3.14, so
   Python 3.14 is not currently supported.
 
@@ -31,6 +31,13 @@
   ```text
   Python 3.13.15
   The mini_rag package works
+  ```
+
+  Ruff and mypy target Python 3.12, the minimum supported version. Run the
+  lint check with:
+
+  ```bash
+  python -m ruff check .
   ```
 
   ### Run the embedding tests
@@ -103,6 +110,10 @@
   no default; provide it with `--chunks`, `CHUNKS`, or the TOML table.
   Defaults are `output_dir = "index"`,
   `embedding_model = "text-embedding-3-small"`, and `batch_size = 256`.
+
+  `mini_rag.embed.save_index` requires a NumPy matrix with dtype `float32`.
+  Other dtypes raise `TypeError` before creating the output directory or
+  writing files; no implicit conversion is performed.
 
   ```bash
   python -m mini_rag.embed \

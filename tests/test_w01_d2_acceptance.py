@@ -54,7 +54,9 @@ class IngestRun:
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     assert path.is_file(), f"Ingest did not create {path}"
     records: list[dict[str, Any]] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), 1
+    ):
         assert line.strip(), f"Blank JSONL line at {path}:{line_number}"
         try:
             value = json.loads(line)
@@ -131,7 +133,11 @@ def _run_ingest(
 
 @pytest.fixture(scope="session")
 def selected_manifest(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    missing = [document_id for document_id in DOCUMENT_IDS if not (SOURCE_PDF_DIR / f"{document_id}.pdf").is_file()]
+    missing = [
+        document_id
+        for document_id in DOCUMENT_IDS
+        if not (SOURCE_PDF_DIR / f"{document_id}.pdf").is_file()
+    ]
     if missing:
         pytest.skip(f"Restore the IPCC corpus first; missing PDFs: {missing}")
     path = tmp_path_factory.mktemp("w01-d2-data") / "documents.csv"
@@ -199,7 +205,9 @@ def test_cli_writes_valid_chunks_with_traceable_metadata(
         assert not missing, f"Chunk {position} is missing fields: {sorted(missing)}"
         assert isinstance(record["chunk_id"], str) and record["chunk_id"].strip()
         assert isinstance(record["page"], int) and record["page"] >= 1
-        assert isinstance(record["source_url"], str) and record["source_url"].startswith("https://")
+        assert isinstance(record["source_url"], str) and record[
+            "source_url"
+        ].startswith("https://")
         assert isinstance(record["text"], str) and record["text"].strip()
         assert not re.search(r"[ \t]{2,}", record["text"]), (
             f"Repeated horizontal whitespace in {record['chunk_id']}"

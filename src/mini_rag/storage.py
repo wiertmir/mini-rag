@@ -1,6 +1,6 @@
 import asyncio
-from collections.abc import AsyncIterator
 import hashlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import aiofiles
@@ -38,6 +38,7 @@ async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
 def read_chunks(path: Path) -> list[Chunk]:
     """Read all chunks, propagating line-numbered parsing and validation errors."""
     return asyncio.run(_collect_chunks(path))
+
 
 def calculate_file_sha(path: Path) -> str:
     digest = hashlib.sha256()

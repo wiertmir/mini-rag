@@ -1,15 +1,27 @@
-from collections.abc import AsyncIterator
+"""
+Embed chunks from a JSONL file and save a normalized vector index.
+
+Writes embeddings.npy (float32, one L2-normalized row per chunk, in chunk-file
+order) and embedding_manifest.json (model, dimension, record count, and the
+SHA-256 of the chunk file, used to detect a stale index).
+"""
+
+import argparse
+import asyncio
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from time import perf_counter
 
 import numpy as np
-import openai
 import rich_struct.log
 from asyncstdlib import batched
 from numpy.typing import NDArray
+from openai import AsyncOpenAI
 
+from mini_rag.config import EmbedConfig, HelpFormatter, load_config
 from mini_rag.errors import InconsistentManifestError
 from mini_rag.models import Chunk, EmbeddingManifest
+from mini_rag.storage import calculate_file_sha, read_chunks_async
 
 rich_struct.log.configure()
 
@@ -19,16 +31,13 @@ logger = rich_struct.log.get_logger()
 async def normalize_async(
     embeddings_iter: AsyncIterator[list[float]],
 ) -> NDArray[np.float32]:
-    raw_embeddings = await _collect(embeddings_iter)
+    raw_embeddings = await _collect_async(embeddings_iter)
 
     return normalize(raw_embeddings)
 
 
 def normalize(matrix: NDArray[np.float32]) -> NDArray[np.float32]:
     """Normalize rows, reporting invalid norms with one-based row numbers."""
-    if not isinstance(matrix, np.ndarray):
-        raise TypeError(f"Expected a NumPy array, got {type(matrix).__name__}")
-
     if matrix.ndim != 2:
         raise ValueError(f"Expected a 2-D array, got shape {matrix.shape}")
 
@@ -80,27 +89,29 @@ def save_index(
     manifest_path.write_text(manifest.model_dump_json(indent=2))
 
 
-async def _collect(embeddings_iter: AsyncIterator[list[float]]) -> NDArray[np.float32]:
+async def _collect_async(
+    embeddings_iter: AsyncIterator[list[float]],
+) -> NDArray[np.float32]:
     embeddings = [np.asarray(row, dtype=np.float32) async for row in embeddings_iter]
 
     if not len(embeddings):
-        raise ValueError("Expecting at least one embedding")
+        raise ValueError("Expecting at leat one embedding")
     return np.stack(embeddings)
 
 
-async def embed_chunks(
+def embed_chunks(
     chunks: AsyncIterator[Chunk],
-    client: openai.AsyncOpenAI,
+    client: AsyncOpenAI,
     model: str,
     batch_size: int,
 ) -> AsyncIterator[list[float]]:
-    return embed_texts(
+    return embed_texts_async(
         (chunk.text async for chunk in chunks), client, model, batch_size
     )
 
 
-async def embed_texts(
-    texts: AsyncIterator[str], client: openai.AsyncOpenAI, model: str, batch_size: int
+async def embed_texts_async(
+    texts: AsyncIterator[str], client: AsyncOpenAI, model: str, batch_size: int
 ) -> AsyncIterator[list[float]]:
     batch_no = 0
     total_texts = 0
@@ -134,3 +145,46 @@ async def embed_texts(
         perf_counter() - start_time,
         total_tokens,
     )
+
+
+async def run_embed(config: EmbedConfig, client: AsyncOpenAI) -> EmbeddingManifest:
+    logger.info("Reading chunks from file {}", config.chunks)
+
+    chunks_sha = calculate_file_sha(config.chunks)
+    chunks = read_chunks_async(config.chunks)
+
+    raw_embeddings = embed_chunks(
+        chunks, client, config.embedding_model, config.batch_size
+    )
+    embeddings = await normalize_async(raw_embeddings)
+
+    manifest = EmbeddingManifest(
+        model=config.embedding_model,
+        dimension=embeddings.shape[1],
+        records=embeddings.shape[0],
+        chunks_path=config.chunks,
+        chunks_sha256=chunks_sha,
+    )
+
+    save_index(config.output_dir, embeddings, manifest)
+
+    return manifest
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="python -m mini_rag.embed",
+        description=__doc__,
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+    config = load_config(EmbedConfig, argv, parser)
+
+    logger.info("Starting the embed app")
+
+    client = AsyncOpenAI()
+    asyncio.run(run_embed(config, client))
+
+
+if __name__ == "__main__":
+    main()

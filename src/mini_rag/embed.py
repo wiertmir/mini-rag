@@ -38,6 +38,9 @@ async def normalize_async(
 
 def normalize(matrix: NDArray[np.float32]) -> NDArray[np.float32]:
     """Normalize rows, reporting invalid norms with one-based row numbers."""
+    if not isinstance(matrix, np.ndarray):
+        raise TypeError(f"Expected a NumPy array, got {type(matrix).__name__}")
+
     if matrix.ndim != 2:
         raise ValueError(f"Expected a 2-D array, got shape {matrix.shape}")
 
@@ -66,6 +69,9 @@ def save_index(
     output_dir: Path, matrix: NDArray[np.float32], manifest: EmbeddingManifest
 ) -> None:
     """Remove the old manifest before rewriting the index; write the new one last."""
+    if not isinstance(matrix, np.ndarray):
+        raise TypeError(f"Expected a NumPy array, got {type(matrix).__name__}")
+
     if matrix.dtype != np.dtype(np.float32):
         raise TypeError(f"Expected float32 matrix, got {matrix.dtype}")
 
@@ -96,7 +102,7 @@ async def _collect_async(
     embeddings = [np.asarray(row, dtype=np.float32) async for row in embeddings_iter]
 
     if not len(embeddings):
-        raise ValueError("Expecting at leat one embedding")
+        raise ValueError("Expecting at least one embedding")
     return np.stack(embeddings)
 
 

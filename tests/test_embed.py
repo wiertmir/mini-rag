@@ -8,14 +8,12 @@ import numpy as np
 import pytest
 from openai import AsyncOpenAI
 
-from mini_rag.embed import (
-    _collect,
-    embed_texts,
-    normalize,
-    normalize_async,
-    save_index,
-)
-from mini_rag.models import EmbeddingManifest
+from mini_rag.config import EmbedConfig
+from mini_rag.embed import _collect_async as _collect
+from mini_rag.embed import embed_texts_async as embed_texts
+from mini_rag.embed import normalize, normalize_async, run_embed, save_index
+from mini_rag.models import Chunk, EmbeddingManifest
+from mini_rag.storage import calculate_file_sha
 
 
 @pytest.fixture
@@ -227,3 +225,92 @@ async def test_embed_texts_empty_iterator() -> None:
 
     assert vectors == []
     assert client.calls == []
+
+
+@pytest.fixture
+def run_embed_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> EmbedConfig:
+    (tmp_path / "logs").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MINI_RAG_CONFIG", raising=False)
+    chunks_path = tmp_path / "chunks.jsonl"
+    chunks = [
+        Chunk(
+            chunk_id=f"sample_p001_c{index:03d}",
+            document_id="sample",
+            title="Sample",
+            collection="test",
+            source_path=tmp_path / "sample.pdf",
+            source_url="https://example.test/sample.pdf",
+            page=1,
+            text=text,
+            token_count=1,
+        )
+        for index, text in enumerate(["a", "bb", "ccc"], start=1)
+    ]
+    chunks_path.write_text(
+        "".join(chunk.model_dump_json() + "\n" for chunk in chunks),
+        encoding="utf-8",
+    )
+    return EmbedConfig(
+        chunks=chunks_path,
+        output_dir=tmp_path / "out",
+        batch_size=2,
+        embedding_model="test-model",
+    )
+
+
+async def test_run_embed_writes_index_and_manifest(
+    run_embed_config: EmbedConfig,
+) -> None:
+    config = run_embed_config
+    client = FakeClient()
+
+    returned_manifest = await run_embed(config, cast(AsyncOpenAI, client))
+
+    matrix = np.load(config.output_dir / "embeddings.npy", allow_pickle=False)
+    manifest = EmbeddingManifest.model_validate_json(
+        (config.output_dir / "embedding_manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert matrix.shape == (3, 2)
+    assert matrix.dtype == np.float32
+    np.testing.assert_allclose(np.linalg.norm(matrix, axis=1), 1.0)
+    assert manifest.records == 3
+    assert manifest.dimension == 2
+    assert manifest.model == config.embedding_model
+    assert manifest.chunks_path == config.chunks
+    assert manifest.chunks_sha256 == calculate_file_sha(config.chunks)
+    assert returned_manifest == manifest
+    assert client.calls == [
+        ("test-model", ("a", "bb")),
+        ("test-model", ("ccc",)),
+    ]
+
+
+async def test_run_embed_propagates_second_batch_failure_without_output(
+    run_embed_config: EmbedConfig,
+) -> None:
+    failure = RuntimeError("Second batch failed")
+
+    class FailingClient(FakeClient):
+        async def create(
+            self, *, model: str, input: tuple[str, ...]
+        ) -> SimpleNamespace:
+            if len(self.calls) == 1:
+                self.calls.append((model, input))
+                raise failure
+            return await super().create(model=model, input=input)
+
+    config = run_embed_config
+    client = FailingClient()
+
+    with pytest.raises(RuntimeError, match="Second batch failed") as exc:
+        await run_embed(config, cast(AsyncOpenAI, client))
+
+    assert exc.value is failure
+    assert client.calls == [
+        ("test-model", ("a", "bb")),
+        ("test-model", ("ccc",)),
+    ]
+    assert not (config.output_dir / "embeddings.npy").exists()
+    assert not (config.output_dir / "embedding_manifest.json").exists()

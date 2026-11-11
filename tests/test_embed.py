@@ -287,6 +287,27 @@ async def test_run_embed_writes_index_and_manifest(
     ]
 
 
+async def test_run_embed_rejects_mismatched_embedding_count_before_saving(
+    run_embed_config: EmbedConfig,
+) -> None:
+    class FewerVectorsClient(FakeClient):
+        async def create(
+            self, *, model: str, input: tuple[str, ...]
+        ) -> SimpleNamespace:
+            response = await super().create(model=model, input=input)
+            response.data = response.data[:-1]
+            return response
+
+    config = run_embed_config
+    client = FewerVectorsClient()
+
+    with pytest.raises(ValueError, match="Expected 3 embeddings for chunks, got 1"):
+        await run_embed(config, cast(AsyncOpenAI, client))
+
+    assert not (config.output_dir / "embeddings.npy").exists()
+    assert not (config.output_dir / "embedding_manifest.json").exists()
+
+
 async def test_run_embed_propagates_second_batch_failure_without_output(
     run_embed_config: EmbedConfig,
 ) -> None:

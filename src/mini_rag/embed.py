@@ -152,11 +152,30 @@ async def run_embed(config: EmbedConfig, client: AsyncOpenAI) -> EmbeddingManife
 
     chunks_sha = calculate_file_sha(config.chunks)
     chunks = read_chunks_async(config.chunks)
+    chunk_count = 0
+
+    async def count_chunks() -> AsyncIterator[Chunk]:
+        nonlocal chunk_count
+        async for chunk in chunks:
+            chunk_count += 1
+            yield chunk
 
     raw_embeddings = embed_chunks(
-        chunks, client, config.embedding_model, config.batch_size
+        count_chunks(), client, config.embedding_model, config.batch_size
     )
-    embeddings = await normalize_async(raw_embeddings)
+    embedding_count = 0
+
+    async def validate_embedding_count() -> AsyncIterator[list[float]]:
+        nonlocal embedding_count
+        async for embedding in raw_embeddings:
+            embedding_count += 1
+            yield embedding
+        if embedding_count != chunk_count:
+            raise ValueError(
+                f"Expected {chunk_count} embeddings for chunks, got {embedding_count}"
+            )
+
+    embeddings = await normalize_async(validate_embedding_count())
 
     manifest = EmbeddingManifest(
         model=config.embedding_model,

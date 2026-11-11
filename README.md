@@ -7,7 +7,9 @@
 
   ### 1. Set up the environment
 
-  The project supports Python 3.13+ and uses Python 3.13.15 for local development.
+  The project supports Python 3.11 through 3.13 and uses Python 3.13.15 for
+  local development. PyMuPDF has compatibility issues with Python 3.14, so
+  Python 3.14 is not currently supported.
 
   ```bash
   pyenv install -s 3.13.15

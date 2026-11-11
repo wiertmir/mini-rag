@@ -2,7 +2,6 @@
 
 import argparse
 import csv
-import hashlib
 import json
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -17,6 +16,7 @@ from mini_rag.chunk import CHUNK_MODEL, chunk_text
 from mini_rag.config import HelpFormatter, IngestConfig, load_config
 from mini_rag.models import Chunk, Manifest
 from mini_rag.pdf_parsers import PdfDocument, TextExtractionConfig, extract_text
+from mini_rag.storage import calculate_file_sha
 
 rich_struct.log.configure(file=True)
 log = rich_struct.log.get_logger()
@@ -62,7 +62,7 @@ def process_document(
                     document_id=doc.id,
                     title=doc.title,
                     collection=doc.collection,
-                    source_path=doc.source_path,
+                    source_path=Path(doc.source_path),
                     source_url=manifest.url,
                     page=page_no,
                     text=chunk,
@@ -134,16 +134,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     save_ingest_manifest(config, docs_no, total_pages, chunk_result, doc_stats, errors)
     if errors:
         raise SystemExit(1)
-
-
-def calculate_file_sha(path: Path) -> str:
-    digest = hashlib.sha256()
-
-    with path.open("rb") as file:
-        while block := file.read(1024 * 1024):
-            digest.update(block)
-
-    return digest.hexdigest()
 
 
 def save_ingest_manifest(

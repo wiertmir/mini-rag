@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 from openai import AsyncOpenAI
 
-from mini_rag.embed import embed_texts, normalize, save_index
+from mini_rag.embed import (
+    _collect,
+    embed_texts,
+    normalize,
+    normalize_async,
+    save_index,
+)
 from mini_rag.models import EmbeddingManifest
 
 
@@ -22,6 +28,43 @@ def embedding_manifest() -> EmbeddingManifest:
         chunks_sha256="a" * 64,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
+
+
+async def iter_embeddings(rows: list[list[float]]) -> AsyncIterator[list[float]]:
+    for row in rows:
+        yield row
+
+
+async def test_collect_preserves_rows_as_float32_matrix() -> None:
+    rows = [[0.1, 0.2, 0.3], [4.0, 5.0, 6.0]]
+
+    result = await _collect(iter_embeddings(rows))
+
+    assert result.shape == (2, 3)
+    assert result.dtype == np.float32
+    np.testing.assert_array_equal(result, np.array(rows, dtype=np.float32))
+
+
+async def test_collect_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="one embedding"):
+        await _collect(iter_embeddings([]))
+
+
+async def test_normalize_async_collects_and_normalizes_rows() -> None:
+    result = await normalize_async(iter_embeddings([[3.0, 4.0], [0.0, 5.0]]))
+
+    assert result.dtype == np.float32
+    assert np.allclose(result, [[0.6, 0.8], [0.0, 1.0]])
+
+
+def test_normalize_rejects_non_float32_matrix() -> None:
+    with pytest.raises(TypeError, match="Expected float32 matrix, got float64"):
+        normalize(np.array([[3.0, 4.0]], dtype=np.float64))
+
+
+def test_normalize_rejects_plain_lists() -> None:
+    with pytest.raises(TypeError, match="Expected a NumPy array, got list"):
+        normalize([[3.0, 4.0]])  # type: ignore[arg-type]
 
 
 def test_normalize_produces_unit_row_norms() -> None:

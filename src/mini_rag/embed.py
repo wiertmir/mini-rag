@@ -26,11 +26,17 @@ async def normalize_async(
 
 def normalize(matrix: NDArray[np.float32]) -> NDArray[np.float32]:
     """Normalize rows, reporting invalid norms with one-based row numbers."""
+    if not isinstance(matrix, np.ndarray):
+        raise TypeError(f"Expected a NumPy array, got {type(matrix).__name__}")
+
     if matrix.ndim != 2:
         raise ValueError(f"Expected a 2-D array, got shape {matrix.shape}")
 
     if matrix.shape[0] == 0:
         raise ValueError("Expecting matrix with rows")
+
+    if matrix.dtype != np.dtype(np.float32):
+        raise TypeError(f"Expected float32 matrix, got {matrix.dtype}")
 
     logger.info("Normalizing {} rows", matrix.shape[0])
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
@@ -77,8 +83,8 @@ def save_index(
 async def _collect(embeddings_iter: AsyncIterator[list[float]]) -> NDArray[np.float32]:
     embeddings = [np.asarray(row, dtype=np.float32) async for row in embeddings_iter]
 
-    if len(embeddings):
-        raise ValueError("Expecting at leat one embedding")
+    if not len(embeddings):
+        raise ValueError("Expecting at least one embedding")
     return np.stack(embeddings)
 
 

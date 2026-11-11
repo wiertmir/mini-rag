@@ -7,7 +7,7 @@
         "source.organizeImports.ruff": "explicit"
       }
     },
-    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.defaultEnvManager": "ms-python.python:pyenv",
     "python.defaultInterpreterPath": "${userHome}/.pyenv/versions/3.13.15/bin/python",
     "python.testing.pytestArgs": [
       "tests"

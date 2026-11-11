@@ -5,6 +5,7 @@ import csv
 import json
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from multiprocessing import get_context
 from pathlib import Path
 from typing import TypedDict
@@ -18,7 +19,6 @@ from mini_rag.models import Chunk, Manifest
 from mini_rag.pdf_parsers import PdfDocument, TextExtractionConfig, extract_text
 from mini_rag.storage import calculate_file_sha
 
-rich_struct.log.configure(file=True)
 log = rich_struct.log.get_logger()
 
 
@@ -91,6 +91,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         allow_abbrev=False,
     )
     config = load_config(IngestConfig, argv, parser)
+    rich_struct.log.configure(file=config.log_folder)
 
     manifests = read_manifest_file(config.manifest)
 
@@ -104,6 +105,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     with ProcessPoolExecutor(
         max_workers=max(1, min(4, len(manifests))),
         mp_context=get_context("spawn"),
+        initializer=partial(rich_struct.log.configure, file=config.log_folder),
     ) as executor:
         futures = [
             executor.submit(process_document, manifest, config)

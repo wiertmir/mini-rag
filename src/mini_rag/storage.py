@@ -10,7 +10,6 @@ from pydantic import ValidationError
 from mini_rag.errors import ChunkParseError, ChunkValidationError
 from mini_rag.models import Chunk
 
-rich_struct.log.configure(file=True)
 logger = rich_struct.log.get_logger()
 
 

@@ -22,3 +22,7 @@ class ManifestError(Exception):
 
 class InconsistentManifestError(ManifestError):
     """There is something wrong with Manifest"""
+
+
+class EmptyInputData(Exception):
+    """There is no input data to produce any output"""

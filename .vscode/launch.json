@@ -14,6 +14,15 @@
                 "--manifest",
                 "data/1_document.csv"
             ]
+        },
+        {
+            "name": "Embed module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "mini_rag.embed",
+            "args": [
+                
+            ]
         }
     ]
 }

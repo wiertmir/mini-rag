@@ -65,7 +65,7 @@ def normalize(matrix: NDArray[np.float32]) -> NDArray[np.float32]:
 def save_index(
     output_dir: Path, matrix: NDArray[np.float32], manifest: EmbeddingManifest
 ) -> None:
-    """Save a float32 index; reject other dtypes before writing any files."""
+    """Remove the old manifest before rewriting the index; write the new one last."""
     if matrix.dtype != np.dtype(np.float32):
         raise TypeError(f"Expected float32 matrix, got {matrix.dtype}")
 
@@ -80,11 +80,12 @@ def save_index(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     embeddings_path = output_dir / "embeddings.npy"
+    manifest_path = output_dir / "embedding_manifest.json"
+    manifest_path.unlink(missing_ok=True)
     logger.info(
         "Saving embeddings matrix to {}. Size={}", embeddings_path, matrix.shape
     )
     np.save(embeddings_path, matrix)
-    manifest_path = output_dir / "embedding_manifest.json"
     logger.info("Saving embeddings manifest to {}", manifest_path)
     manifest_path.write_text(manifest.model_dump_json(indent=2))
 

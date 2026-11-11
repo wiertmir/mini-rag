@@ -127,6 +127,27 @@ def test_save_index_manifest_round_trip(
     assert EmbeddingManifest.model_validate_json(file_text) == embedding_manifest
 
 
+def test_save_index_removes_old_manifest_before_writing_embeddings(
+    tmp_path: Path,
+    embedding_manifest: EmbeddingManifest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    matrix = np.array([[0.6, 0.8], [-0.8, 0.6]], dtype=np.float32)
+    manifest_path = tmp_path / "embedding_manifest.json"
+    manifest_path.write_text("old manifest", encoding="utf-8")
+
+    def fail_save(*args: object, **kwargs: object) -> None:
+        assert not manifest_path.exists()
+        raise OSError("Embedding write failed")
+
+    monkeypatch.setattr(np, "save", fail_save)
+
+    with pytest.raises(OSError, match="Embedding write failed"):
+        save_index(tmp_path, matrix, embedding_manifest)
+
+    assert not manifest_path.exists()
+
+
 @pytest.mark.parametrize("dtype", ["float64", "float16", "int32", "complex64"])
 def test_save_index_rejects_non_float32_before_creating_output(
     tmp_path: Path, embedding_manifest: EmbeddingManifest, dtype: str

@@ -9,9 +9,14 @@ import pytest
 from openai import AsyncOpenAI
 
 from mini_rag.config import EmbedConfig
-from mini_rag.embed import _collect_async as _collect
-from mini_rag.embed import embed_texts_async as embed_texts
-from mini_rag.embed import normalize, normalize_async, run_embed, save_index
+from mini_rag.embed import (
+    _collect_async,
+    embed_texts_async,
+    normalize,
+    normalize_async,
+    run_embed,
+    save_index,
+)
 from mini_rag.models import Chunk, EmbeddingManifest
 from mini_rag.storage import calculate_file_sha
 
@@ -36,7 +41,7 @@ async def iter_embeddings(rows: list[list[float]]) -> AsyncIterator[list[float]]
 async def test_collect_preserves_rows_as_float32_matrix() -> None:
     rows = [[0.1, 0.2, 0.3], [4.0, 5.0, 6.0]]
 
-    result = await _collect(iter_embeddings(rows))
+    result = await _collect_async(iter_embeddings(rows))
 
     assert result.shape == (2, 3)
     assert result.dtype == np.float32
@@ -45,7 +50,7 @@ async def test_collect_preserves_rows_as_float32_matrix() -> None:
 
 async def test_collect_rejects_empty_input() -> None:
     with pytest.raises(ValueError, match="one embedding"):
-        await _collect(iter_embeddings([]))
+        await _collect_async(iter_embeddings([]))
 
 
 async def test_normalize_async_collects_and_normalizes_rows() -> None:
@@ -206,7 +211,7 @@ async def test_embed_texts_batches_with_partial_final_batch() -> None:
 
     vectors = [
         vector
-        async for vector in embed_texts(
+        async for vector in embed_texts_async(
             iter_texts(texts), cast(AsyncOpenAI, client), "test-model", batch_size=2
         )
     ]
@@ -226,7 +231,7 @@ async def test_embed_texts_preserves_text_order() -> None:
 
     vectors = [
         vector
-        async for vector in embed_texts(
+        async for vector in embed_texts_async(
             iter_texts(texts), cast(AsyncOpenAI, client), "test-model", batch_size=2
         )
     ]
@@ -239,7 +244,7 @@ async def test_embed_texts_empty_iterator() -> None:
 
     vectors = [
         vector
-        async for vector in embed_texts(
+        async for vector in embed_texts_async(
             iter_texts([]), cast(AsyncOpenAI, client), "test-model", batch_size=2
         )
     ]

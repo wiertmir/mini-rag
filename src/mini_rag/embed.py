@@ -19,11 +19,9 @@ from numpy.typing import NDArray
 from openai import AsyncOpenAI
 
 from mini_rag.config import EmbedConfig, HelpFormatter, load_config
-from mini_rag.errors import InconsistentManifestError
+from mini_rag.errors import EmptyInputData, InconsistentManifestError
 from mini_rag.models import Chunk, EmbeddingManifest
 from mini_rag.storage import calculate_file_sha, read_chunks_async
-
-rich_struct.log.configure()
 
 logger = rich_struct.log.get_logger()
 
@@ -102,7 +100,7 @@ async def _collect_async(
     embeddings = [np.asarray(row, dtype=np.float32) async for row in embeddings_iter]
 
     if not len(embeddings):
-        raise ValueError("Expecting at least one embedding")
+        raise EmptyInputData("Expecting at least one embedding")
     return np.stack(embeddings)
 
 
@@ -182,7 +180,10 @@ async def run_embed(config: EmbedConfig, client: AsyncOpenAI) -> EmbeddingManife
                 f"Expected {chunk_count} embeddings for chunks, got {embedding_count}"
             )
 
-    embeddings = await normalize_async(validate_embedding_count())
+    try:
+        embeddings = await normalize_async(validate_embedding_count())
+    except EmptyInputData:
+        raise EmptyInputData(f"There are no embeddings in {config.chunks}")
 
     manifest = EmbeddingManifest(
         model=config.embedding_model,
@@ -205,6 +206,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         allow_abbrev=False,
     )
     config = load_config(EmbedConfig, argv, parser)
+    rich_struct.log.configure(file=config.log_folder)
 
     logger.info("Starting the embed app")
 

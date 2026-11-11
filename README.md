@@ -49,6 +49,12 @@
   Async tests run automatically with `pytest-asyncio`, included in the dev
   dependencies. The embedding tests use a fake client and make no API calls.
 
+  Logging is configured by the `embed` and `ingest` CLI entry points, not
+  when importing modules. Both commands write daily logs to `log_folder`
+  (`logs/` by default), named after the running script, for example
+  `embed_YYYY_MM_DD.log`. Ingest also configures its spawned worker processes.
+  Importing modules or collecting tests does not create log files.
+
   ### Continuous integration
 
   - **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and every

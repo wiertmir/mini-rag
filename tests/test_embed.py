@@ -17,6 +17,7 @@ from mini_rag.embed import (
     run_embed,
     save_index,
 )
+from mini_rag.errors import EmptyInputData
 from mini_rag.models import Chunk, EmbeddingManifest
 from mini_rag.storage import calculate_file_sha
 
@@ -49,7 +50,7 @@ async def test_collect_preserves_rows_as_float32_matrix() -> None:
 
 
 async def test_collect_rejects_empty_input() -> None:
-    with pytest.raises(ValueError, match="one embedding"):
+    with pytest.raises(EmptyInputData, match="Expecting at least one embedding"):
         await _collect_async(iter_embeddings([]))
 
 
@@ -62,7 +63,8 @@ async def test_normalize_async_collects_and_normalizes_rows() -> None:
 
 def test_normalize_rejects_non_float32_matrix() -> None:
     with pytest.raises(TypeError, match="Expected float32 matrix, got float64"):
-        normalize(np.array([[3.0, 4.0]], dtype=np.float64))
+        # Deliberately pass float64 to verify runtime dtype validation.
+        normalize(np.array([[3.0, 4.0]], dtype=np.float64))  # pyright: ignore[reportArgumentType]
 
 
 def test_normalize_rejects_plain_lists() -> None:

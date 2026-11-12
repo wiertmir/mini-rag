@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
+from mini_rag.errors import DimensionMismatchError
 from mini_rag.models import Chunk
 from mini_rag.retrieve import search
 
@@ -81,8 +82,42 @@ def test_search_rejects_dimension_mismatch(
 ) -> None:
     matrix, chunks = index
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        DimensionMismatchError,
+        match="Question vector's dimension is 3, where the index dimension is 2",
+    ):
         search([1, 0, 0], matrix, chunks, top_k=3)
+
+
+@pytest.mark.parametrize(
+    ("query", "shape"),
+    [
+        (np.array([[1, 0]], dtype=np.float32), r"\(1, 2\)"),
+        (np.array(1, dtype=np.float32), r"\(\)"),
+    ],
+)
+def test_search_rejects_non_vector_query(
+    index: tuple[NDArray[np.float32], list[Chunk]],
+    query: NDArray[np.float32],
+    shape: str,
+) -> None:
+    matrix, chunks = index
+
+    with pytest.raises(
+        ValueError, match=f"Expected a 1-D query vector, got shape {shape}"
+    ):
+        search(query, matrix, chunks, top_k=3)
+
+
+def test_search_accepts_float32_array_query(
+    index: tuple[NDArray[np.float32], list[Chunk]],
+) -> None:
+    matrix, chunks = index
+
+    results = search(np.array([1, 0], dtype=np.float32), matrix, chunks, top_k=1)
+
+    assert results[0].chunk == chunks[0]
+    assert results[0].score == pytest.approx(1.0)
 
 
 def test_search_is_deterministic(

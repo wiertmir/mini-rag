@@ -16,21 +16,25 @@ logger = rich_struct.log.get_logger()
 
 
 def search(
-    query_vector: Sequence[float],
+    query_vector: Sequence[float] | NDArray[np.float32],
     matrix: NDArray[np.float32],
     chunks: Sequence[Chunk],
     top_k: int,
 ) -> list[SearchResult]:
     """Rank chunks by cosine similarity, breaking score ties by chunk ID."""
-    d = len(query_vector)
+    query = np.asarray(query_vector, dtype=np.float32)
     n = matrix.shape[0]
 
     if n == 0:
-        raise EmptyIndex()
+        raise EmptyIndex("index has 0 rows")
 
+    if query.ndim != 1:
+        raise ValueError(f"Expected a 1-D query vector, got shape {query.shape}")
+
+    d = query.shape[0]
     if d != matrix.shape[1]:
         raise DimensionMismatchError(
-            f"Question vector's dimension is {d}, where the index dimesnion is {matrix.shape[1]}"
+            f"Question vector's dimension is {d}, where the index dimension is {matrix.shape[1]}"
         )
 
     if top_k < 1:
@@ -47,7 +51,7 @@ def search(
         matrix.shape[0],
     )
 
-    norm_query_vector = normalize(np.array([query_vector], dtype=np.float32))[0]
+    norm_query_vector = normalize(query.reshape(1, -1))[0]
     scores = matrix @ norm_query_vector
     # lexsort uses the last key as primary: descending score, then ascending ID.
     sort_indices = np.lexsort(([chunk.chunk_id for chunk in chunks], -scores))

@@ -24,5 +24,17 @@ class InconsistentManifestError(ManifestError):
     """There is something wrong with Manifest"""
 
 
-class EmptyInputData(Exception):
+class EmptyInputData(ValueError):
     """There is no input data to produce any output"""
+
+
+class EmptyIndex(ValueError):
+    """The index is empty (no chunks)"""
+
+
+class DimensionMismatchError(ValueError):
+    """e.g. a 3-D question against a 2-D index"""
+
+
+class IndexAndChunksNotSyncError(ValueError):
+    """Index got broken and doesn't match size of chunks"""

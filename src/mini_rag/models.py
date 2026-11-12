@@ -1,7 +1,67 @@
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+_SCORE_ROUNDING_TOLERANCE = 1e-4
+
+
+class Chunk(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_id: str = Field(
+        pattern=r"^.+_p\d{3,}_c\d{3,}$",
+        description=(
+            "Stable ID in the form {document_id}_p{page:03d}_c{chunk:03d}; "
+            "re-ingesting the same input produces the same ID"
+        ),
+    )
+    document_id: str = Field(
+        min_length=1,
+        description="Source document ID from the manifest, shared by its chunks",
+    )
+    title: str = Field(
+        min_length=1, description="Manifest document title, copied into every chunk"
+    )
+    collection: str = Field(
+        min_length=1,
+        description="Collection the source document belongs to, used for filtering",
+    )
+    source_path: Path = Field(description="Local PDF path the chunk was cut from")
+    source_url: str = Field(
+        min_length=1, description="Original online document URL for citations"
+    )
+    page: int = Field(ge=1, description="1-based page number (page_no)")
+    text: str = Field(
+        min_length=1, description="Chunk text that is embedded and returned to users"
+    )
+    token_count: int = Field(
+        ge=0,
+        description="Token count using the chunk_text tokenizer for size and overlap",
+    )
+
+
+class SearchResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rank: int = Field(
+        ge=1, description="1-based position in the result list (rank 1 = best)"
+    )
+    score: float = Field(
+        ge=-1 - _SCORE_ROUNDING_TOLERANCE,
+        le=1 + _SCORE_ROUNDING_TOLERANCE,
+        description=(
+            "Cosine similarity in [-1, 1]; overshoots up to 0.0001 are clamped"
+        ),
+    )
+    chunk: Chunk = Field(
+        description="The full chunk (carries chunk_id, document_id, page, text)"
+    )
+
+    @field_validator("score")
+    @classmethod
+    def clamp_score_rounding_error(cls, score: float) -> float:
+        return min(1.0, max(-1.0, score))
 
 
 class EmbeddingManifest(BaseModel):
@@ -29,15 +89,3 @@ class Manifest(BaseModel):
     collection: str = Field(
         description="The bigger set document belongs to. Usefull for filtering"
     )
-
-
-class Chunk(BaseModel):
-    chunk_id: str
-    document_id: str
-    title: str
-    collection: str
-    source_path: Path
-    source_url: str
-    page: int
-    text: str
-    token_count: int

@@ -48,7 +48,6 @@ def normalize(matrix: NDArray[np.float32]) -> NDArray[np.float32]:
     if matrix.dtype != np.dtype(np.float32):
         raise TypeError(f"Expected float32 matrix, got {matrix.dtype}")
 
-    logger.info("Normalizing {} rows", matrix.shape[0])
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
 
     # NaN/inf rows are as bad as zero rows: they also yield NaN scores.

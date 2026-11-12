@@ -1,15 +1,25 @@
-from collections.abc import Sequence
+"""Show the top-k chunks from the embedding index most similar to a question."""
+
+import argparse
+import asyncio
+from collections.abc import AsyncIterator, Sequence
 
 import numpy as np
+import rich_struct.log
 from numpy.typing import NDArray
+from openai import AsyncOpenAI
 
-from mini_rag.embed import normalize
+from mini_rag.config import HelpFormatter, RetrieveConfig, load_config
+from mini_rag.embed import embed_texts_async, normalize
 from mini_rag.errors import (
     DimensionMismatchError,
     EmptyIndex,
     IndexAndChunksNotSyncError,
 )
 from mini_rag.models import Chunk, SearchResult
+from mini_rag.storage import load_index_async
+
+logger = rich_struct.log.get_logger()
 
 
 def search(
@@ -52,3 +62,56 @@ def search(
         SearchResult(rank=rank, score=float(scores[i]), chunk=chunks[i])
         for (rank, i) in enumerate(sort_indices[:top_k], start=1)
     ]
+
+
+async def _yield_one(text: str) -> AsyncIterator[str]:
+    yield text
+
+
+async def _read_one_async(iter: AsyncIterator[list[float]]) -> list[float]:
+    async for lst in iter:
+        return lst
+
+    raise StopAsyncIteration("`iter` has no elements")
+
+
+async def retrieve_async(
+    config: RetrieveConfig, client: AsyncOpenAI
+) -> list[SearchResult]:
+    index, chunks, manifest = await load_index_async(config.index_dir, config.chunks)
+    logger.debug("Searching for text {}", config.question)
+    questions = _yield_one(config.question)
+    model = manifest.model
+    question_vector = await _read_one_async(
+        embed_texts_async(questions, client, model, 1)
+    )
+    logger.debug("Semantic searching")
+    return search(question_vector, index, chunks, config.top_k)
+
+
+def preview(text: str, limit: int = 200) -> str:
+    return text[:200]
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    rich_struct.log.configure(console=False, file=True)
+
+    parser = argparse.ArgumentParser(
+        prog="python -m mini_rag.retrieve",
+        description=__doc__,
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+
+    config = load_config(RetrieveConfig, argv, parser)
+    client = AsyncOpenAI()
+
+    result = asyncio.run(retrieve_async(config, client))
+    for hit in result:
+        print(
+            f"Rank: {hit.rank}, Score: {hit.score:.4}, ChunkId: {hit.chunk.chunk_id}, DocumentId: {hit.chunk.document_id}, Page: {hit.chunk.page}, Text: {preview(hit.chunk.text)}"
+        )
+
+
+if __name__ == "__main__":
+    main()

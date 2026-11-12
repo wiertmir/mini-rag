@@ -1,16 +1,88 @@
-import asyncio
 import hashlib
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import aiofiles
+import numpy as np
 import rich_struct.log
+from numpy.typing import NDArray
 from pydantic import ValidationError
 
-from mini_rag.errors import ChunkParseError, ChunkValidationError
-from mini_rag.models import Chunk
+from mini_rag.errors import (
+    ChunkParseError,
+    ChunkValidationError,
+    DimensionMismatchError,
+    InconsistentManifestError,
+    StaleIndexError,
+)
+from mini_rag.models import Chunk, EmbeddingManifest
 
 logger = rich_struct.log.get_logger()
+
+
+async def load_index_async(
+    index_dir: Path, chunks_path: Path | None
+) -> tuple[NDArray[np.float32], list[Chunk], EmbeddingManifest]:
+
+    manifest_path = index_dir / "embedding_manifest.json"
+    logger.info("Loading embeddings manifest from {}", manifest_path)
+    async with aiofiles.open(manifest_path, mode="r", encoding="utf-8") as file:
+        json_string = await file.read()
+    manifest = EmbeddingManifest.model_validate_json(json_string)
+
+    chunks_path = chunks_path or manifest.chunks_path
+    chunks = await read_chunk_list_async(chunks_path)
+    chunks_sha = calculate_file_sha(chunks_path)
+
+    if chunks_sha != manifest.chunks_sha256:
+        raise StaleIndexError("Stale index, re-run embed")
+
+    embeddings_path = index_dir / "embeddings.npy"
+    logger.info("Loading normalized embeddings from {}", embeddings_path)
+    embeddings: NDArray[np.float32] = np.load(embeddings_path)
+
+    if embeddings.shape[0] != len(chunks):
+        raise ValueError(
+            f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"
+        )
+
+    if embeddings.shape != (manifest.records, manifest.dimension):
+        raise DimensionMismatchError(
+            f"Embeddings shape: {embeddings.shape}, where manifest specifies {(manifest.records, manifest.dimension)}"
+        )
+
+    return (embeddings, chunks, manifest)
+
+
+def save_index(
+    output_dir: Path, matrix: NDArray[np.float32], manifest: EmbeddingManifest
+) -> None:
+    """Remove the old manifest before rewriting the index; write the new one last."""
+    if not isinstance(matrix, np.ndarray):
+        raise TypeError(f"Expected a NumPy array, got {type(matrix).__name__}")
+
+    if matrix.dtype != np.dtype(np.float32):
+        raise TypeError(f"Expected float32 matrix, got {matrix.dtype}")
+
+    if manifest.records != matrix.shape[0]:
+        raise InconsistentManifestError(
+            f"Inconsistent number of rows in manifest ({manifest.records}) and matrix ({matrix.shape[0]})"
+        )
+    if manifest.dimension != matrix.shape[1]:
+        raise InconsistentManifestError(
+            f"Inconsistent number of columns (dimension) in manifest ({manifest.dimension}) and matrix ({matrix.shape[1]})"
+        )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    embeddings_path = output_dir / "embeddings.npy"
+    manifest_path = output_dir / "embedding_manifest.json"
+    manifest_path.unlink(missing_ok=True)
+    logger.info(
+        "Saving embeddings matrix to {}. Size={}", embeddings_path, matrix.shape
+    )
+    np.save(embeddings_path, matrix)
+    logger.info("Saving embeddings manifest to {}", manifest_path)
+    manifest_path.write_text(manifest.model_dump_json(indent=2))
 
 
 async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
@@ -34,9 +106,8 @@ async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
                 yield chunk
 
 
-def read_chunks(path: Path) -> list[Chunk]:
-    """Read all chunks, propagating line-numbered parsing and validation errors."""
-    return asyncio.run(_collect_chunks(path))
+async def read_chunk_list_async(path: Path) -> list[Chunk]:
+    return await _collect_chunks_async(path)
 
 
 def calculate_file_sha(path: Path) -> str:
@@ -49,5 +120,5 @@ def calculate_file_sha(path: Path) -> str:
     return digest.hexdigest()
 
 
-async def _collect_chunks(path: Path) -> list[Chunk]:
+async def _collect_chunks_async(path: Path) -> list[Chunk]:
     return [chunk async for chunk in read_chunks_async(path)]

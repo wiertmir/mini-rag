@@ -38,3 +38,7 @@ class DimensionMismatchError(ValueError):
 
 class IndexAndChunksNotSyncError(ValueError):
     """Index got broken and doesn't match size of chunks"""
+
+
+class StaleIndexError(ValueError):
+    """Chunks changed, index file got stale"""

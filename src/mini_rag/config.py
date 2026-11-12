@@ -18,6 +18,7 @@ from typing import Any, ClassVar, Self, cast
 from pydantic import Field, ValidationError, create_model, model_validator
 from pydantic_settings import (
     BaseSettings,
+    CliPositionalArg,
     CliSettingsSource,
     CliSuppress,
     PydanticBaseSettingsSource,
@@ -114,6 +115,22 @@ class EmbedConfig(Config):
         default="text-embedding-3-small", description="embedding model"
     )
     batch_size: int = Field(default=256, description="number of texts per API request")
+
+
+class RetrieveConfig(Config):
+    model_config = SettingsConfigDict(toml_table_header=("retrieve",))
+
+    question: CliPositionalArg[str] = Field(description="user question")
+    top_k: int = Field(
+        default=5, gt=1, description="How many most similar chunks to return"
+    )
+    index_dir: Path = Field(
+        default=Path("index"), description="directory for the index and manifest"
+    )
+    chunks: Path | None = Field(
+        default=None,
+        description="Use that chunks file, instead of defined by index manifest",
+    )
 
 
 def load_config[C: Config](

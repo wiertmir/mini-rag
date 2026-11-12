@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 
 import numpy as np
-import rich_struct.log
 from numpy.typing import NDArray
 
 from mini_rag.embed import normalize
@@ -11,8 +10,6 @@ from mini_rag.errors import (
     IndexAndChunksNotSyncError,
 )
 from mini_rag.models import Chunk, SearchResult
-
-logger = rich_struct.log.get_logger()
 
 
 def search(
@@ -45,15 +42,10 @@ def search(
             f"Index has {matrix.shape[0]} rows, where chunks have {len(chunks)} rows"
         )
 
-    logger.info(
-        "Searching for top {} best scoring chunks among {} index rows",
-        top_k,
-        matrix.shape[0],
-    )
-
     norm_query_vector = normalize(query.reshape(1, -1))[0]
     scores = matrix @ norm_query_vector
     # lexsort uses the last key as primary: descending score, then ascending ID.
+    # full sort as data is not that big and `argpartition` have some unnecessary challanges
     sort_indices = np.lexsort(([chunk.chunk_id for chunk in chunks], -scores))
 
     return [

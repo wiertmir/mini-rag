@@ -21,6 +21,7 @@ def search(
     chunks: Sequence[Chunk],
     top_k: int,
 ) -> list[SearchResult]:
+    """Rank chunks by cosine similarity, breaking score ties by chunk ID."""
     d = len(query_vector)
     n = matrix.shape[0]
 
@@ -46,9 +47,10 @@ def search(
         matrix.shape[0],
     )
 
-    norm_query_vector = normalize(np.array(query_vector, dtype=np.float32))
+    norm_query_vector = normalize(np.array([query_vector], dtype=np.float32))[0]
     scores = matrix @ norm_query_vector
-    sort_indices = np.argsort(scores, descending=True, kind="stable")
+    # lexsort uses the last key as primary: descending score, then ascending ID.
+    sort_indices = np.lexsort(([chunk.chunk_id for chunk in chunks], -scores))
 
     return [
         SearchResult(rank=rank, score=float(scores[i]), chunk=chunks[i])

@@ -157,6 +157,10 @@
     --top-k 5
   ```
 
+  Retrieval results appear in a Rich table with rank, score, chunk ID,
+  document ID, page, and text preview. API, filesystem, and validation errors
+  appear in red on stderr and exit with status 1.
+
   ### Ask a question
 
   ```bash

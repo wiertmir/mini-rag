@@ -15,6 +15,7 @@ dependencies = [
     "pydantic-settings",
     "pymupdf",
     "pypdf",
+    "rich",
     "rich-argparse",
     "rich-struct[log]",
     "tiktoken",

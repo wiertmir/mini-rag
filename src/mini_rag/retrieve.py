@@ -7,7 +7,10 @@ from collections.abc import AsyncIterator, Sequence
 import numpy as np
 import rich_struct.log
 from numpy.typing import NDArray
-from openai import AsyncOpenAI
+from openai import APIError, AsyncOpenAI
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
 from mini_rag.config import HelpFormatter, RetrieveConfig, load_config
 from mini_rag.embed import embed_texts_async, normalize
@@ -106,11 +109,27 @@ def main(argv: Sequence[str] | None = None) -> None:
     config = load_config(RetrieveConfig, argv, parser)
     client = AsyncOpenAI()
 
-    result = asyncio.run(retrieve_async(config, client))
-    for hit in result:
-        print(
-            f"Rank: {hit.rank}, Score: {hit.score:.4}, ChunkId: {hit.chunk.chunk_id}, DocumentId: {hit.chunk.document_id}, Page: {hit.chunk.page}, Text: {preview(hit.chunk.text)}"
+    try:
+        result = asyncio.run(retrieve_async(config, client))
+    except (APIError, OSError, ValueError) as exc:
+        Console(stderr=True).print(
+            f"Error: {exc}", style="red", markup=False, highlight=False
         )
+        raise SystemExit(1) from exc
+
+    table = Table(header_style="bold cyan")
+    for column in ("Rank", "Score", "ChunkId", "DocumentId", "Page", "Text"):
+        table.add_column(column)
+    for hit in result:
+        table.add_row(
+            str(hit.rank),
+            f"{hit.score:.4}",
+            Text(hit.chunk.chunk_id),
+            Text(hit.chunk.document_id),
+            str(hit.chunk.page),
+            Text(preview(hit.chunk.text)),
+        )
+    Console().print(table)
 
 
 if __name__ == "__main__":

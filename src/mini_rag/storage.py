@@ -1,6 +1,7 @@
 import hashlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 import aiofiles
 import numpy as np
@@ -13,6 +14,7 @@ from mini_rag.errors import (
     ChunkValidationError,
     DimensionMismatchError,
     InconsistentManifestError,
+    IndexAndChunksNotSyncError,
     StaleIndexError,
 )
 from mini_rag.models import Chunk, EmbeddingManifest
@@ -20,9 +22,13 @@ from mini_rag.models import Chunk, EmbeddingManifest
 logger = rich_struct.log.get_logger()
 
 
-async def load_index_async(
-    index_dir: Path, chunks_path: Path | None
-) -> tuple[NDArray[np.float32], list[Chunk], EmbeddingManifest]:
+class LoadedIndex(NamedTuple):
+    embeddings_matrix: NDArray[np.float32]
+    chunks: Sequence[Chunk]
+    manifest: EmbeddingManifest
+
+
+async def load_index_async(index_dir: Path, chunks_path: Path | None) -> LoadedIndex:
 
     manifest_path = index_dir / "embedding_manifest.json"
     logger.info("Loading embeddings manifest from {}", manifest_path)
@@ -42,7 +48,7 @@ async def load_index_async(
     embeddings: NDArray[np.float32] = np.load(embeddings_path)
 
     if embeddings.shape[0] != len(chunks):
-        raise ValueError(
+        raise IndexAndChunksNotSyncError(
             f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"
         )
 
@@ -51,7 +57,7 @@ async def load_index_async(
             f"Embeddings shape: {embeddings.shape}, where manifest specifies {(manifest.records, manifest.dimension)}"
         )
 
-    return (embeddings, chunks, manifest)
+    return LoadedIndex(embeddings, chunks, manifest)
 
 
 def save_index(

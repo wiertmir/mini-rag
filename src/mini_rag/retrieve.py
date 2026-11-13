@@ -115,19 +115,19 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
     async with AsyncOpenAI() as client:
         result = await retrieve_async(config, client)
 
-        table = Table(header_style="bold cyan")
-        for column in ("Rank", "Score", "ChunkId", "DocumentId", "Page", "Text"):
-            table.add_column(column)
-        for hit in result:
-            table.add_row(
-                str(hit.rank),
-                f"{hit.score:.4f}",
-                Text(hit.chunk.chunk_id),
-                Text(hit.chunk.document_id),
-                str(hit.chunk.page),
-                Text(preview(hit.chunk.text)),
-            )
-        Console().print(table)
+    table = Table(header_style="bold cyan")
+    for column in ("Rank", "Score", "ChunkId", "DocumentId", "Page", "Text"):
+        table.add_column(column)
+    for hit in result:
+        table.add_row(
+            str(hit.rank),
+            f"{hit.score:.4f}",
+            Text(hit.chunk.chunk_id),
+            Text(hit.chunk.document_id),
+            str(hit.chunk.page),
+            Text(preview(hit.chunk.text)),
+        )
+    Console().print(table)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

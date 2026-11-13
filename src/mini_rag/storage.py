@@ -47,6 +47,9 @@ async def load_index_async(index_dir: Path, chunks_path: Path | None) -> LoadedI
     logger.info("Loading normalized embeddings from {}", embeddings_path)
     embeddings: NDArray[np.float32] = np.load(embeddings_path)
 
+    if embeddings.dtype != np.dtype(np.float32):
+        raise TypeError(f"Expected float32 matrix, got {embeddings.dtype}")
+
     if embeddings.shape[0] != len(chunks):
         raise IndexAndChunksNotSyncError(
             f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"

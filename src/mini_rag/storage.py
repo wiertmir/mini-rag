@@ -116,7 +116,7 @@ async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
 
 
 async def read_chunk_list_async(path: Path) -> list[Chunk]:
-    return await _collect_chunks_async(path)
+    return [chunk async for chunk in read_chunks_async(path)]
 
 
 def calculate_file_sha(path: Path) -> str:
@@ -127,7 +127,3 @@ def calculate_file_sha(path: Path) -> str:
             digest.update(block)
 
     return digest.hexdigest()
-
-
-async def _collect_chunks_async(path: Path) -> list[Chunk]:
-    return [chunk async for chunk in read_chunks_async(path)]

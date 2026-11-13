@@ -133,7 +133,7 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
 def main(argv: Sequence[str] | None = None) -> None:
     try:
         asyncio.run(_run_async(argv))
-    except (OpenAIError, OSError, ValueError) as exc:
+    except (OpenAIError, OSError, ValueError, TypeError) as exc:
         Console(stderr=True).print(
             f"Error: {exc}", style="red", markup=False, highlight=False
         )

@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Sequence
 import numpy as np
 import rich_struct.log
 from numpy.typing import NDArray
-from openai import APIError, AsyncOpenAI, OpenAIError
+from openai import AsyncOpenAI, OpenAIError
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text

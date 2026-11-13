@@ -9,7 +9,6 @@ SHA-256 of the chunk file, used to detect a stale index).
 import argparse
 import asyncio
 from collections.abc import AsyncIterator, Sequence
-from pathlib import Path
 from time import perf_counter
 
 import numpy as np
@@ -19,9 +18,9 @@ from numpy.typing import NDArray
 from openai import AsyncOpenAI
 
 from mini_rag.config import EmbedConfig, HelpFormatter, load_config
-from mini_rag.errors import EmptyInputData, InconsistentManifestError
+from mini_rag.errors import EmptyInputData
 from mini_rag.models import Chunk, EmbeddingManifest
-from mini_rag.storage import calculate_file_sha, read_chunks_async
+from mini_rag.storage import calculate_file_sha, read_chunks_async, save_index
 
 logger = rich_struct.log.get_logger()
 
@@ -60,37 +59,6 @@ def normalize(matrix: NDArray[np.float32]) -> NDArray[np.float32]:
         )
 
     return matrix / norms
-
-
-def save_index(
-    output_dir: Path, matrix: NDArray[np.float32], manifest: EmbeddingManifest
-) -> None:
-    """Remove the old manifest before rewriting the index; write the new one last."""
-    if not isinstance(matrix, np.ndarray):
-        raise TypeError(f"Expected a NumPy array, got {type(matrix).__name__}")
-
-    if matrix.dtype != np.dtype(np.float32):
-        raise TypeError(f"Expected float32 matrix, got {matrix.dtype}")
-
-    if manifest.records != matrix.shape[0]:
-        raise InconsistentManifestError(
-            f"Inconsistent number of rows in manifest ({manifest.records}) and matrix ({matrix.shape[0]})"
-        )
-    if manifest.dimension != matrix.shape[1]:
-        raise InconsistentManifestError(
-            f"Inconsistent number of columns (dimension) in manifest ({manifest.dimension}) and matrix ({matrix.shape[1]})"
-        )
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    embeddings_path = output_dir / "embeddings.npy"
-    manifest_path = output_dir / "embedding_manifest.json"
-    manifest_path.unlink(missing_ok=True)
-    logger.info(
-        "Saving embeddings matrix to {}. Size={}", embeddings_path, matrix.shape
-    )
-    np.save(embeddings_path, matrix)
-    logger.info("Saving embeddings manifest to {}", manifest_path)
-    manifest_path.write_text(manifest.model_dump_json(indent=2))
 
 
 async def _collect_async(

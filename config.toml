@@ -18,3 +18,7 @@ chunk_overlap = 150
 output_dir = "index"
 embedding_model = "text-embedding-3-small"
 batch_size = 256
+
+[retrieve]
+index_dir = "index"
+top_k = 5

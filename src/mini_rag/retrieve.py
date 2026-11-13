@@ -1,15 +1,29 @@
-from collections.abc import Sequence
+"""Show the top-k chunks from the embedding index most similar to a question."""
+
+import argparse
+import asyncio
+from collections.abc import AsyncIterator, Sequence
 
 import numpy as np
+import rich_struct.log
 from numpy.typing import NDArray
+from openai import AsyncOpenAI, OpenAIError
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
-from mini_rag.embed import normalize
+from mini_rag.config import HelpFormatter, RetrieveConfig, load_config
+from mini_rag.embed import embed_texts_async, normalize
 from mini_rag.errors import (
     DimensionMismatchError,
     EmptyIndex,
+    EmptyInputData,
     IndexAndChunksNotSyncError,
 )
 from mini_rag.models import Chunk, SearchResult
+from mini_rag.storage import load_index_async
+
+logger = rich_struct.log.get_logger()
 
 
 def search(
@@ -52,3 +66,79 @@ def search(
         SearchResult(rank=rank, score=float(scores[i]), chunk=chunks[i])
         for (rank, i) in enumerate(sort_indices[:top_k], start=1)
     ]
+
+
+async def _yield_one(text: str) -> AsyncIterator[str]:
+    yield text
+
+
+async def _read_one_async(iter: AsyncIterator[list[float]]) -> list[float]:
+    first_result: list[float] | None = None
+    async for lst in iter:
+        first_result = lst
+        break
+
+    if first_result is not None:
+        return first_result
+    raise EmptyInputData("`iter` has no elements")
+
+
+async def retrieve_async(
+    config: RetrieveConfig, client: AsyncOpenAI
+) -> list[SearchResult]:
+    index, chunks, manifest = await load_index_async(config.index_dir, config.chunks)
+    logger.debug("Searching for text {}", config.question)
+    questions = _yield_one(config.question)
+    model = manifest.model
+    question_vector = await _read_one_async(
+        embed_texts_async(questions, client, model, 1)
+    )
+    logger.debug("Semantic searching")
+    return search(question_vector, index, chunks, config.top_k)
+
+
+def preview(text: str, limit: int = 200) -> str:
+    return text[:limit]
+
+
+async def _run_async(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="python -m mini_rag.retrieve",
+        description=__doc__,
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+
+    config = load_config(RetrieveConfig, argv, parser)
+    rich_struct.log.configure(console=False, file=config.log_folder)
+
+    async with AsyncOpenAI() as client:
+        result = await retrieve_async(config, client)
+
+    table = Table(header_style="bold cyan")
+    for column in ("Rank", "Score", "ChunkId", "DocumentId", "Page", "Text"):
+        table.add_column(column)
+    for hit in result:
+        table.add_row(
+            str(hit.rank),
+            f"{hit.score:.4f}",
+            Text(hit.chunk.chunk_id),
+            Text(hit.chunk.document_id),
+            str(hit.chunk.page),
+            Text(preview(hit.chunk.text)),
+        )
+    Console().print(table)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    try:
+        asyncio.run(_run_async(argv))
+    except (OpenAIError, OSError, ValueError) as exc:
+        Console(stderr=True).print(
+            f"Error: {exc}", style="red", markup=False, highlight=False
+        )
+        raise SystemExit(1) from exc
+
+
+if __name__ == "__main__":
+    main()

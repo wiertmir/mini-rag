@@ -48,7 +48,7 @@ async def load_index_async(index_dir: Path, chunks_path: Path | None) -> LoadedI
     embeddings: NDArray[np.float32] = np.load(embeddings_path)
 
     if embeddings.dtype != np.dtype(np.float32):
-        raise TypeError(f"Expected float32 matrix, got {embeddings.dtype}")
+        raise ValueError(f"Expected float32 matrix, got {embeddings.dtype}")
 
     if embeddings.shape[0] != len(chunks):
         raise IndexAndChunksNotSyncError(

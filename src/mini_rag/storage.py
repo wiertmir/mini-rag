@@ -28,7 +28,7 @@ class LoadedIndex(NamedTuple):
     manifest: EmbeddingManifest
 
 
-async def load_index_async(index_dir: Path, chunks_path: Path | None) -> LoadedIndex:
+async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> LoadedIndex:
 
     manifest_path = index_dir / "embedding_manifest.json"
     logger.info("Loading embeddings manifest from {}", manifest_path)
@@ -51,9 +51,7 @@ async def load_index_async(index_dir: Path, chunks_path: Path | None) -> LoadedI
         raise ValueError(f"Expected float32 matrix, got {embeddings.dtype}")
 
     if embeddings.shape[0] != len(chunks):
-        raise IndexAndChunksNotSyncError(
-            f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"
-        )
+        raise IndexAndChunksNotSyncError(f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records")
 
     if embeddings.shape != (manifest.records, manifest.dimension):
         raise DimensionMismatchError(
@@ -63,9 +61,7 @@ async def load_index_async(index_dir: Path, chunks_path: Path | None) -> LoadedI
     return LoadedIndex(embeddings, chunks, manifest)
 
 
-def save_index(
-    output_dir: Path, matrix: NDArray[np.float32], manifest: EmbeddingManifest
-) -> None:
+def save_index(output_dir: Path, matrix: NDArray[np.float32], manifest: EmbeddingManifest) -> None:
     """Remove the old manifest before rewriting the index; write the new one last."""
     if not isinstance(matrix, np.ndarray):
         raise TypeError(f"Expected a NumPy array, got {type(matrix).__name__}")
@@ -86,9 +82,7 @@ def save_index(
     embeddings_path = output_dir / "embeddings.npy"
     manifest_path = output_dir / "embedding_manifest.json"
     manifest_path.unlink(missing_ok=True)
-    logger.info(
-        "Saving embeddings matrix to {}. Size={}", embeddings_path, matrix.shape
-    )
+    logger.info("Saving embeddings matrix to {}. Size={}", embeddings_path, matrix.shape)
     np.save(embeddings_path, matrix)
     logger.info("Saving embeddings manifest to {}", manifest_path)
     manifest_path.write_text(manifest.model_dump_json(indent=2))
@@ -106,12 +100,8 @@ async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
                     chunk = Chunk.model_validate_json(line)
                 except ValidationError as exc:
                     if any(error["type"] == "json_invalid" for error in exc.errors()):
-                        raise ChunkParseError(
-                            path, line_no, f"Invalid JSON: {exc}"
-                        ) from exc
-                    raise ChunkValidationError(
-                        path, line_no, f"Invalid chunk: {exc}"
-                    ) from exc
+                        raise ChunkParseError(path, line_no, f"Invalid JSON: {exc}") from exc
+                    raise ChunkValidationError(path, line_no, f"Invalid chunk: {exc}") from exc
                 yield chunk
 
 

@@ -1,9 +1,59 @@
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 _SCORE_ROUNDING_TOLERANCE = 1e-4
+_NO_DOCUMENT_SENTINEL = "NONE"
+
+
+class QuestionType(Enum):
+    DEFINITION = "definition"
+    MULTI_DOCUMENT = "multi_document"
+    SIMPLE = "simple"
+    UNANSWERABLE = "unanswerable"
+
+
+class ReviewStatusType(Enum):
+    DRAFT_NOT_PAGE_VERIFIED = "draft_not_page_verified"
+
+
+class Question(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="Question id")
+    question: str = Field(description="Question text")
+    reference_answer: str = Field(description="Answer used as reference")
+    expected_documents: list[str] = Field(description="Which document contains answer")
+    type: QuestionType = Field(
+        description="Question type (simple, definition, multidocument)"
+    )
+    answerable: bool = Field(
+        description="Based on data we gather is it possible to answer it?"
+    )
+    review_status: ReviewStatusType = Field(description="Review status")
+
+    @model_validator(mode="after")
+    def enforce_answerable_docs_constraint(self) -> "Question":
+        if not self.answerable and self.expected_documents != [_NO_DOCUMENT_SENTINEL]:
+            raise ValueError(
+                "Non answerable question can't have any exepected documents"
+            )
+
+        if self.answerable and self.expected_documents == [_NO_DOCUMENT_SENTINEL]:
+            raise ValueError(
+                "Answerable question require must have non empty expected documents"
+            )
+
+        return self
 
 
 class Chunk(BaseModel):

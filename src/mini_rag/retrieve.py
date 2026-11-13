@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Sequence
 import numpy as np
 import rich_struct.log
 from numpy.typing import NDArray
-from openai import APIError, AsyncOpenAI
+from openai import APIError, AsyncOpenAI, OpenAIError
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -17,6 +17,7 @@ from mini_rag.embed import embed_texts_async, normalize
 from mini_rag.errors import (
     DimensionMismatchError,
     EmptyIndex,
+    EmptyInputData,
     IndexAndChunksNotSyncError,
 )
 from mini_rag.models import Chunk, SearchResult
@@ -72,10 +73,14 @@ async def _yield_one(text: str) -> AsyncIterator[str]:
 
 
 async def _read_one_async(iter: AsyncIterator[list[float]]) -> list[float]:
+    first_result: list[float] | None = None
     async for lst in iter:
-        return lst
+        first_result = lst
+        break
 
-    raise StopAsyncIteration("`iter` has no elements")
+    if first_result:
+        return first_result
+    raise EmptyInputData("`iter` has no elements")
 
 
 async def retrieve_async(
@@ -93,12 +98,10 @@ async def retrieve_async(
 
 
 def preview(text: str, limit: int = 200) -> str:
-    return text[:200]
+    return text[:limit]
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    rich_struct.log.configure(console=False, file=True)
-
+async def _run_async(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="python -m mini_rag.retrieve",
         description=__doc__,
@@ -107,29 +110,34 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     config = load_config(RetrieveConfig, argv, parser)
-    client = AsyncOpenAI()
+    rich_struct.log.configure(console=False, file=config.log_folder)
 
+    async with AsyncOpenAI() as client:
+        result = await retrieve_async(config, client)
+
+        table = Table(header_style="bold cyan")
+        for column in ("Rank", "Score", "ChunkId", "DocumentId", "Page", "Text"):
+            table.add_column(column)
+        for hit in result:
+            table.add_row(
+                str(hit.rank),
+                f"{hit.score:.4f}",
+                Text(hit.chunk.chunk_id),
+                Text(hit.chunk.document_id),
+                str(hit.chunk.page),
+                Text(preview(hit.chunk.text)),
+            )
+        Console().print(table)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     try:
-        result = asyncio.run(retrieve_async(config, client))
-    except (APIError, OSError, ValueError) as exc:
+        asyncio.run(_run_async(argv))
+    except (APIError, OpenAIError, OSError, ValueError) as exc:
         Console(stderr=True).print(
             f"Error: {exc}", style="red", markup=False, highlight=False
         )
         raise SystemExit(1) from exc
-
-    table = Table(header_style="bold cyan")
-    for column in ("Rank", "Score", "ChunkId", "DocumentId", "Page", "Text"):
-        table.add_column(column)
-    for hit in result:
-        table.add_row(
-            str(hit.rank),
-            f"{hit.score:.4}",
-            Text(hit.chunk.chunk_id),
-            Text(hit.chunk.document_id),
-            str(hit.chunk.page),
-            Text(preview(hit.chunk.text)),
-        )
-    Console().print(table)
 
 
 if __name__ == "__main__":

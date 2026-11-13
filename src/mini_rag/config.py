@@ -122,7 +122,7 @@ class RetrieveConfig(Config):
 
     question: CliPositionalArg[str] = Field(description="user question")
     top_k: int = Field(
-        default=5, gt=1, description="How many most similar chunks to return"
+        default=5, ge=1, description="How many most similar chunks to return"
     )
     index_dir: Path = Field(
         default=Path("index"), description="directory for the index and manifest"

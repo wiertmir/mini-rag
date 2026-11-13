@@ -78,7 +78,7 @@ async def _read_one_async(iter: AsyncIterator[list[float]]) -> list[float]:
         first_result = lst
         break
 
-    if first_result:
+    if first_result is not None:
         return first_result
     raise EmptyInputData("`iter` has no elements")
 
@@ -133,7 +133,7 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
 def main(argv: Sequence[str] | None = None) -> None:
     try:
         asyncio.run(_run_async(argv))
-    except (APIError, OpenAIError, OSError, ValueError) as exc:
+    except (OpenAIError, OSError, ValueError) as exc:
         Console(stderr=True).print(
             f"Error: {exc}", style="red", markup=False, highlight=False
         )

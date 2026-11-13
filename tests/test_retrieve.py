@@ -251,7 +251,7 @@ async def test_load_index_rejects_non_float32_matrix(
     index_dir, chunks_path, _ = mini_index
     np.save(index_dir / "embeddings.npy", np.eye(2, dtype=np.float64))
 
-    with pytest.raises(TypeError, match="Expected float32 matrix, got float64"):
+    with pytest.raises(ValueError, match="Expected float32 matrix, got float64"):
         await load_index_async(index_dir, chunks_path)
 
 

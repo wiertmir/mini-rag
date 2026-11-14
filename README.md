@@ -125,6 +125,22 @@
   Different chunking settings can share the same output directory.
   Configure it with `--output-dir`, `OUTPUT_DIR`, or `output_dir` in `[ingest]`.
 
+  Chunking follows the document structure:
+
+  - A new section starts at every heading, unless the previous block is a
+    heading too, so `3` / `3.1 Introduction` stay together with their text.
+  - Sections run across page boundaries; a chunk records the page it starts on
+    (`page`) and ends on (`page_end`). `chunk_id` numbers chunks per start
+    page: `<document>_p<page>_c<n>`.
+  - A section below `--min-chunk-tokens` (default 200) is merged into the
+    next one (the last section of a document merges into the previous one).
+  - A section above `--chunk-size` is split into evenly sized windows sharing
+    exactly `--chunk-overlap` tokens, so there are no tiny near-duplicate tails.
+    Chunks of different sections do not overlap.
+
+  The ingest manifest records the strategy (`"strategy": "sections"`) and
+  `min_chunk_tokens` next to the size and overlap.
+
   The storage readers `mini_rag.storage.read_chunks` and `read_chunks_async`
   raise `ChunkParseError` for malformed JSON and `ChunkValidationError` for
   records that do not satisfy the chunk schema. Both inherit from
@@ -158,7 +174,7 @@
   ```
 
   Retrieval results appear in a Rich table with rank, score, chunk ID,
-  document ID, page, and text preview. API, filesystem, and validation errors
+  document ID, page range, and text preview. API, filesystem, and validation errors
   appear in red on stderr and exit with status 1.
 
   ### Display a document's chunks
@@ -168,16 +184,19 @@
   ```
 
   Shows every chunk of the document in a Rich table with chunk ID and full,
-  multiline text. Text shared by consecutive chunks on the same page appears
-  in a separate yellow row labelled, for example, `c001 ↔ c002`, and pages
-  are separated by lines. Chunks are read from `--chunks`, or from the
+  multiline text and its page range. Text shared by consecutive chunks (the
+  windows of one section) appears in a separate yellow row labelled, for
+  example, `c001 ↔ c002`; shared matches shorter than 20 characters are
+  ignored. Chunks that share no text, i.e. different sections, are separated
+  by lines. Chunks are read from `--chunks`, or from the
   `chunks_path` in `<index_dir>/embedding_manifest.json` when omitted
   (`--index-dir`, default `index`; TOML table `[display]`).
 
   Limit the output to some pages with `--pages`, using 1-based inclusive
   ranges separated by commas. Open ranges are allowed: `5-` means page 5 to
   the end and `-3` means pages 1–3. Use the `=` form so a leading `-` is not
-  read as an option. A selection without chunks shows an empty table.
+  read as an option. A chunk is shown when any of its pages is selected. A
+  selection without chunks shows an empty table.
 
   ```bash
   python -m mini_rag.display --document-id WGIII_CH03 --pages="3-7,9,14-"

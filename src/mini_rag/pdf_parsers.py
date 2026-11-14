@@ -5,16 +5,33 @@ from typing import NotRequired, TypedDict, cast
 
 import pymupdf
 import rich_struct.log
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from mini_rag.models import Manifest
 
 log = rich_struct.log.get_logger()
 
 
+HEADING_KINDS = frozenset({"title", "section-header"})
+
+
+class PdfBlock(BaseModel):
+    text: str
+    kind: str = Field(description="Layout label, e.g. text, section-header, list-item")
+    joined: bool = Field(
+        default=False,
+        description="Continues the previous block (column or page continuation)",
+    )
+
+    @property
+    def heading(self) -> bool:
+        return self.kind in HEADING_KINDS
+
+
 class PdfPage(BaseModel):
     number: int
     text: str
+    blocks: list[PdfBlock] = Field(default_factory=list)
 
 
 class PdfDocument(BaseModel):
@@ -200,6 +217,7 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig, manifest: Manifes
 
             page = pdf_doc[page_number - 1]
             parts: list[str] = []
+            blocks: list[PdfBlock] = []
 
             regions: list[_TextRegion] = _read_regions(page)
             log.info("Page: {}, found {} textable regions", page_number, len(regions))
@@ -242,6 +260,7 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig, manifest: Manifes
                     log.debug("Skipping page number region")
                     continue
 
+                join = False
                 if previous is not None:
                     boundary = (
                         page_number != previous_page
@@ -261,13 +280,14 @@ def extract_text(pdf_path: Path, config: TextExtractionConfig, manifest: Manifes
 
                 if region.text:
                     parts.append(region.text)
+                    blocks.append(PdfBlock(text=region.text, kind=region.kind, joined=join))
                     allowed_empty_lines = 1
                 elif allowed_empty_lines > 0:
                     parts.append(region.text)
                     allowed_empty_lines -= 1
                 previous, previous_page = region, page_number
 
-            page = PdfPage(number=page_number, text="\n".join(parts))
+            page = PdfPage(number=page_number, text="\n".join(parts), blocks=blocks)
             pages.append(page)
 
     return PdfDocument(

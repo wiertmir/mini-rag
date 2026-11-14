@@ -92,6 +92,7 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
                         chunk_id=r.chunk.chunk_id,
                         document_id=r.chunk.document_id,
                         page=r.chunk.page,
+                        page_end=r.chunk.page_end,
                     )
                     for r in results
                 ],

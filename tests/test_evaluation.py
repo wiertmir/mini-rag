@@ -204,3 +204,16 @@ async def test_smoke_embeds_all_questions_in_one_request(
     _, client = await run_smoke(tmp_path, monkeypatch)
 
     assert client.calls == [("fake-model", ["about A", "about A", "about B"])]
+
+
+def test_question_rejects_unanswerable_with_sentinel_and_real_document() -> None:
+    # Unanswerable means exactly ["NONE"]; ["NONE", "A"] is a dataset mistake.
+    with pytest.raises(ValidationError):
+        Question.model_validate(question_dict(answerable=False, expected_documents=["NONE", "A"]))
+
+
+@pytest.mark.parametrize("documents", [["NONE", "A"], ["A", "NONE"]])
+def test_question_rejects_answerable_containing_none_sentinel(documents: list[str]) -> None:
+    # "NONE" is not a document id; an answerable question must not mention it at all.
+    with pytest.raises(ValidationError):
+        Question.model_validate(question_dict(expected_documents=documents))

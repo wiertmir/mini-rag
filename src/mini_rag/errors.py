@@ -42,3 +42,7 @@ class IndexAndChunksNotSyncError(ValueError):
 
 class StaleIndexError(ValueError):
     """Chunks changed, index file got stale"""
+
+
+class DocumentNotFoundError(ValueError):
+    """The chunks file has no chunks for the requested document"""

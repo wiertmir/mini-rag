@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any, Self
 
 from pydantic import (
     AwareDatetime,
@@ -65,6 +66,9 @@ class RetrievedChunkRecord(BaseModel):
     chunk_id: str
     document_id: str
     page: int = Field(ge=1)
+    page_end: int | None = Field(
+        default=None, ge=1, description="Last page of a multi-page chunk; absent in v1 results"
+    )
 
 
 class RetrievalSmokeRecord(EvaluationRecord):
@@ -96,12 +100,32 @@ class Chunk(BaseModel):
     )
     source_path: Path = Field(description="Local PDF path the chunk was cut from")
     source_url: str = Field(min_length=1, description="Original online document URL for citations")
-    page: int = Field(ge=1, description="1-based page number (page_no)")
+    page: int = Field(ge=1, description="1-based page the chunk starts on")
+    page_end: int = Field(ge=1, description="1-based page the chunk ends on (>= page)")
     text: str = Field(min_length=1, description="Chunk text that is embedded and returned to users")
     token_count: int = Field(
         ge=0,
-        description="Token count using the chunk_text tokenizer for size and overlap",
+        description="Token count using the chunking tokenizer for size and overlap",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_page_end(cls, data: Any) -> Any:
+        """Chunk files from before section chunking are single-page: page_end = page."""
+        if isinstance(data, dict) and "page_end" not in data and "page" in data:
+            return {**data, "page_end": data["page"]}
+        return data
+
+    @model_validator(mode="after")
+    def check_page_range(self) -> Self:
+        if self.page_end < self.page:
+            raise ValueError(f"page_end {self.page_end} is before page {self.page}")
+        return self
+
+    @property
+    def pages(self) -> str:
+        """Human-readable page or page range, e.g. "7" or "7-9"."""
+        return str(self.page) if self.page == self.page_end else f"{self.page}-{self.page_end}"
 
 
 class SearchResult(BaseModel):

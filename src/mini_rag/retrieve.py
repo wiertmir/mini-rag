@@ -113,7 +113,7 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
         result = await retrieve_async(config, client)
 
     table = Table(header_style="bold cyan")
-    for column in ("Rank", "Score", "ChunkId", "DocumentId", "Page", "Text"):
+    for column in ("Rank", "Score", "ChunkId", "DocumentId", "Pages", "Text"):
         table.add_column(column)
     for hit in result:
         table.add_row(
@@ -121,7 +121,7 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
             f"{hit.score:.4f}",
             Text(hit.chunk.chunk_id),
             Text(hit.chunk.document_id),
-            str(hit.chunk.page),
+            hit.chunk.pages,
             Text(preview(hit.chunk.text)),
         )
     Console().print(table)

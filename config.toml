@@ -11,8 +11,9 @@ log_folder = "logs"
 manifest = "data/documents.csv"
 pdf_dir = "data/pdfs"
 output_dir = "index"
-chunk_size = 800
-chunk_overlap = 120
+chunk_size = 600
+chunk_overlap = 90
+min_chunk_tokens = 150
 
 [embed]
 output_dir = "index"
@@ -24,4 +25,4 @@ index_dir = "index"
 top_k = 5
 
 [display]
-index_dir = "index"
+# index_dir defaults to "index"; chunks defaults to the manifest's chunks_path

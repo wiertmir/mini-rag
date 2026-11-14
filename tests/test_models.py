@@ -14,6 +14,7 @@ def chunk() -> Chunk:
         source_path="sample.pdf",
         source_url="https://example.test/sample.pdf",
         page=1,
+        page_end=1,
         text="Sample text",
         token_count=2,
     )
@@ -43,3 +44,19 @@ def test_search_result_clamps_rounding_overshoots(
 def test_search_result_rejects_scores_beyond_rounding_tolerance(chunk: Chunk, score: float) -> None:
     with pytest.raises(ValidationError):
         SearchResult(rank=1, score=score, chunk=chunk)
+
+
+def test_chunk_page_end_defaults_to_page_for_old_files(chunk: Chunk) -> None:
+    data = chunk.model_dump(exclude={"page_end"})
+
+    assert Chunk.model_validate(data).page_end == chunk.page
+
+
+def test_chunk_rejects_page_end_before_page(chunk: Chunk) -> None:
+    with pytest.raises(ValidationError):
+        Chunk.model_validate({**chunk.model_dump(), "page": 3, "page_end": 2})
+
+
+def test_chunk_pages_label(chunk: Chunk) -> None:
+    assert chunk.pages == "1"
+    assert chunk.model_copy(update={"page": 2, "page_end": 4}).pages == "2-4"

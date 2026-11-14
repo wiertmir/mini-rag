@@ -13,7 +13,7 @@ from typing import TypedDict
 import pymupdf
 import rich_struct.log
 
-from mini_rag.chunk import CHUNK_MODEL, chunk_text
+from mini_rag.chunk import CHUNK_MODEL, Block, chunk_blocks
 from mini_rag.config import HelpFormatter, IngestConfig, load_config
 from mini_rag.models import Chunk, Manifest
 from mini_rag.pdf_parsers import PdfDocument, TextExtractionConfig, extract_text
@@ -50,23 +50,32 @@ def process_document(manifest: Manifest, config: IngestConfig) -> tuple[list[Chu
     doc = parse_pdf_text(manifest, config.pdf_dir)
     chunks: list[Chunk] = []
     log.info("Chunking file {}", doc.source_path)
-    for page_no, page in enumerate(doc.pages, 1):
-        for chunk_no, (chunk_tokens, chunk) in enumerate(
-            chunk_text(page.text, config.chunk_size, config.chunk_overlap), 1
-        ):
-            chunks.append(
-                Chunk(
-                    chunk_id=f"{doc.id}_p{page_no:03d}_c{chunk_no:03d}",
-                    document_id=doc.id,
-                    title=doc.title,
-                    collection=doc.collection,
-                    source_path=Path(doc.source_path),
-                    source_url=manifest.url,
-                    page=page_no,
-                    text=chunk,
-                    token_count=chunk_tokens,
-                )
+    blocks = [
+        Block(block.text, page.number, block.heading, block.joined)
+        for page in doc.pages
+        for block in page.blocks
+    ]
+    text_chunks = chunk_blocks(
+        blocks, config.chunk_size, config.chunk_overlap, config.min_chunk_tokens
+    )
+    # chunk_id numbers chunks per start page, so IDs stay stable and readable.
+    per_page: dict[int, int] = {}
+    for text_chunk in text_chunks:
+        chunk_no = per_page[text_chunk.page_start] = per_page.get(text_chunk.page_start, 0) + 1
+        chunks.append(
+            Chunk(
+                chunk_id=f"{doc.id}_p{text_chunk.page_start:03d}_c{chunk_no:03d}",
+                document_id=doc.id,
+                title=doc.title,
+                collection=doc.collection,
+                source_path=Path(doc.source_path),
+                source_url=manifest.url,
+                page=text_chunk.page_start,
+                page_end=text_chunk.page_end,
+                text=text_chunk.text,
+                token_count=text_chunk.token_count,
             )
+        )
     stats: DocumentStats = {
         "document_id": doc.id,
         "source_path": doc.source_path,
@@ -152,6 +161,8 @@ def save_ingest_manifest(
             "tokenizer": CHUNK_MODEL,
             "chunk_size": config.chunk_size,
             "chunk_overlap": config.chunk_overlap,
+            "strategy": "sections",
+            "min_chunk_tokens": config.min_chunk_tokens,
         },
         "summary": {
             "documents": docs,

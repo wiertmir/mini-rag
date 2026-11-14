@@ -3,17 +3,19 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from mini_rag.config import DisplayConfig, PageRange, parse_page_ranges
+from mini_rag.config import DisplayConfig
 from mini_rag.display import (
     ChunkRow,
     build_table,
     load_document_chunks_async,
     main,
     overlap_length,
-    split_page_chunks,
+    select_pages,
+    split_chunks,
 )
 from mini_rag.errors import DocumentNotFoundError
 from mini_rag.models import Chunk, EmbeddingManifest
+from mini_rag.pages import PageRange, parse_page_ranges
 from mini_rag.storage import calculate_file_sha
 
 
@@ -26,6 +28,7 @@ def make_chunk(text: str, page: int = 1, number: int = 1, document_id: str = "do
         source_path=Path("doc.pdf"),
         source_url="https://example.test/doc.pdf",
         page=page,
+        page_end=page,
         text=text,
         token_count=len(text.split()),
     )
@@ -56,6 +59,20 @@ def test_parse_page_ranges_rejects_invalid_spec(spec: str) -> None:
         parse_page_ranges(spec)
 
 
+def test_page_range_overlaps_page_span() -> None:
+    assert PageRange(3, 5).overlaps(1, 3)
+    assert PageRange(3, 5).overlaps(5, 9)
+    assert PageRange(3, 5).overlaps(1, 9)
+    assert not PageRange(3, 5).overlaps(6, 9)
+    assert not PageRange(3, 5).overlaps(1, 2)
+    assert PageRange(3, None).overlaps(100, 101)
+
+
+def test_display_config_parses_pages_once() -> None:
+    assert DisplayConfig(document_id="doc", pages="2-3").page_ranges == (PageRange(2, 3),)
+    assert DisplayConfig(document_id="doc").page_ranges is None
+
+
 def test_page_range_includes_bounds() -> None:
     assert PageRange(3, 5).includes(3)
     assert PageRange(3, 5).includes(5)
@@ -71,59 +88,81 @@ def test_display_config_rejects_invalid_pages_at_load_time() -> None:
 
 # --- overlap detection --------------------------------------------------------
 
+SHARED_1 = "first shared sentence here."
+SHARED_2 = "second shared sentence here."
+
 
 def test_overlap_length_finds_longest_suffix_prefix() -> None:
-    assert overlap_length("one two three", "two three four") == len("two three")
+    assert overlap_length(f"head {SHARED_1}", f"{SHARED_1} tail") == len(SHARED_1)
 
 
 def test_overlap_length_zero_without_shared_text() -> None:
     assert overlap_length("abc", "xyz") == 0
 
 
+def test_overlap_length_ignores_coincidental_short_match() -> None:
+    # A chunk ending with "." followed by one starting with "." is not an overlap.
+    assert overlap_length("ends with a dot.", ". starts with a dot") == 0
+
+
 def test_overlap_length_whole_second_text_contained() -> None:
-    assert overlap_length("alpha beta", "beta") == len("beta")
+    assert overlap_length(f"alpha {SHARED_1}", SHARED_1) == len(SHARED_1)
 
 
-def test_split_page_chunks_separates_unique_and_shared_text() -> None:
+def test_split_chunks_separates_unique_and_shared_text() -> None:
     chunks = [
-        make_chunk("aaa SHARED1", number=1),
-        make_chunk("SHARED1 bbb SHARED2", number=2),
-        make_chunk("SHARED2 ccc", number=3),
+        make_chunk(f"aaa {SHARED_1}", number=1),
+        make_chunk(f"{SHARED_1} bbb {SHARED_2}", number=2),
+        make_chunk(f"{SHARED_2} ccc", number=3),
     ]
 
-    assert split_page_chunks(chunks) == [
-        ChunkRow("doc_p001_c001", "aaa ", is_overlap=False),
-        ChunkRow("c001 ↔ c002", "SHARED1", is_overlap=True),
-        ChunkRow("doc_p001_c002", " bbb ", is_overlap=False),
-        ChunkRow("c002 ↔ c003", "SHARED2", is_overlap=True),
-        ChunkRow("doc_p001_c003", " ccc", is_overlap=False),
+    assert split_chunks(chunks) == [
+        [
+            ChunkRow("doc_p001_c001\np. 1", "aaa ", is_overlap=False),
+            ChunkRow("c001 ↔ c002", SHARED_1, is_overlap=True),
+            ChunkRow("doc_p001_c002\np. 1", " bbb ", is_overlap=False),
+            ChunkRow("c002 ↔ c003", SHARED_2, is_overlap=True),
+            ChunkRow("doc_p001_c003\np. 1", " ccc", is_overlap=False),
+        ]
     ]
 
 
-def test_split_page_chunks_rebuilds_original_text() -> None:
-    chunks = [make_chunk("aaa XY", number=1), make_chunk("XY bbb", number=2)]
-    rows = split_page_chunks(chunks)
+def test_split_chunks_rebuilds_original_text() -> None:
+    chunks = [make_chunk(f"aaa {SHARED_1}", number=1), make_chunk(f"{SHARED_1} bbb", number=2)]
+    (rows,) = split_chunks(chunks)
 
-    assert "".join(row.text for row in rows) == "aaa XY bbb"
-
-
-def test_split_page_chunks_entirely_overlapped_tail_chunk_is_empty() -> None:
-    chunks = [make_chunk("aaa tail", number=1), make_chunk("tail", number=2)]
-    rows = split_page_chunks(chunks)
-
-    assert rows[-1] == ChunkRow("doc_p001_c002", "", is_overlap=False)
+    assert "".join(row.text for row in rows) == f"aaa {SHARED_1} bbb"
 
 
-def test_split_page_chunks_single_chunk_has_no_overlap_row() -> None:
-    assert split_page_chunks([make_chunk("only")]) == [
-        ChunkRow("doc_p001_c001", "only", is_overlap=False)
+def test_split_chunks_starts_new_group_without_shared_text() -> None:
+    chunks = [make_chunk("section one", number=1), make_chunk("section two", number=2)]
+
+    assert [len(group) for group in split_chunks(chunks)] == [1, 1]
+
+
+def test_split_chunks_entirely_overlapped_chunk_is_empty() -> None:
+    chunks = [make_chunk(f"aaa {SHARED_1}", number=1), make_chunk(SHARED_1, number=2)]
+    (rows,) = split_chunks(chunks)
+
+    assert rows[-1] == ChunkRow("doc_p001_c002\np. 1", "", is_overlap=False)
+
+
+def test_split_chunks_label_shows_page_range() -> None:
+    chunk = make_chunk("spans pages", page=3).model_copy(update={"page_end": 5})
+
+    assert split_chunks([chunk])[0][0].label == "doc_p003_c001\np. 3-5"
+
+
+def test_split_chunks_single_chunk_has_no_overlap_row() -> None:
+    assert split_chunks([make_chunk("only")]) == [
+        [ChunkRow("doc_p001_c001\np. 1", "only", is_overlap=False)]
     ]
 
 
 # --- table --------------------------------------------------------------------
 
 
-def test_build_table_adds_section_between_pages() -> None:
+def test_build_table_adds_section_between_groups() -> None:
     chunks = [make_chunk("p1", page=1), make_chunk("p2", page=2), make_chunk("p3", page=3)]
     table = build_table(chunks, "doc: Doc title")
 
@@ -139,6 +178,14 @@ def test_build_table_caption_mentions_count_and_selection() -> None:
 
 def test_build_table_accepts_empty_selection() -> None:
     assert build_table([], "t").row_count == 0
+
+
+def test_select_pages_keeps_chunks_overlapping_the_selection() -> None:
+    multi = make_chunk("multi", page=2, number=1).model_copy(update={"page_end": 4})
+    chunks = [make_chunk("one", page=1), multi, make_chunk("five", page=5)]
+
+    assert select_pages(chunks, parse_page_ranges("3")) == [multi]
+    assert select_pages(chunks, parse_page_ranges("5-")) == [chunks[2]]
 
 
 # --- loading ------------------------------------------------------------------

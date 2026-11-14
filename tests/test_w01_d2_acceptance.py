@@ -240,27 +240,31 @@ def test_both_required_chunking_strategies_are_recorded_and_compared(
     assert manifest_600["parameters"]["chunk_overlap"] == 80
 
 
+def _shared_tokens(previous: list[int], current: list[int], limit: int = 300) -> int:
+    for length in range(min(len(previous), len(current), limit), 0, -1):
+        if previous[-length:] == current[:length]:
+            return length
+    return 0
+
+
 def test_configured_overlap_is_present_between_consecutive_chunks(
     run_600: IngestRun,
 ) -> None:
+    """Section chunking: windows of one section share exactly the configured overlap;
+    a chunk that starts a new section shares no text with the previous one."""
     records = _read_jsonl(run_600.output)
     encoding = tiktoken.encoding_for_model("text-embedding-3-small")
-    checked = 0
+    overlapping = 0
     for previous, current in itertools.pairwise(records):
-        same_page = (
-            previous["document_id"] == current["document_id"]
-            and previous["page"] == current["page"]
-        )
-        if not same_page or previous["token_count"] < 600:
+        if previous["document_id"] != current["document_id"]:
             continue
-        previous_tokens = encoding.encode(previous["text"])
-        current_tokens = encoding.encode(current["text"])
-        assert previous_tokens[-80:] == current_tokens[:80], (
-            f"Missing exact 80-token overlap between {previous['chunk_id']} "
-            f"and {current['chunk_id']}"
+        shared = _shared_tokens(encoding.encode(previous["text"]), encoding.encode(current["text"]))
+        assert shared == 80 or shared < 5, (
+            f"{previous['chunk_id']} and {current['chunk_id']} share {shared} tokens; "
+            "expected exactly 80 (same section) or none (new section)"
         )
-        checked += 1
-    assert checked >= 3, "Could not verify overlap on at least three chunk boundaries"
+        overlapping += shared == 80
+    assert overlapping >= 3, "Could not verify overlap on at least three chunk boundaries"
 
 
 def test_missing_pdf_is_reported_in_the_ingest_manifest(tmp_path: Path) -> None:

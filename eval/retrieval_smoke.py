@@ -44,9 +44,7 @@ async def run_async(argv: Iterable[str] | None = None):
     parser.add_argument(
         "--index-dir", type=str, default="index", help="Location of embeddings index and manifest"
     )
-    parser.add_argument(
-        "--output-dir", type=str, default="eval/results", help="Results directory"
-    )
+    parser.add_argument("--output-dir", type=str, default="eval/results", help="Results directory")
 
     args = parser.parse_args(argv)
 
@@ -75,7 +73,8 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
         aiofiles.open(smoke_jsonl_path, mode="w", encoding="utf-8") as smoke_file,
     ):
         q_vectors = embed_texts_async(
-            (q.question async for q in embedding_questions), client, index.manifest.model)
+            (q.question async for q in embedding_questions), client, index.manifest.model
+        )
         async for question, vector in zip_async(questions, q_vectors, strict=True):
             results = search(vector, index.embeddings_matrix, index.chunks, top_k)
 

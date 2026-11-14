@@ -27,9 +27,7 @@ class ErrorHandler:
         console = Console(stderr=True)
         if isinstance(exc, self._handled_exceptions):
             message = ReprHighlighter()(Text(str(exc)))
-            console.print(
-                Panel(message, title=exc_type.__name__, border_style="red", expand=False)
-            )
+            console.print(Panel(message, title=exc_type.__name__, border_style="red", expand=False))
         else:
             console.print_exception(show_locals=False)
 

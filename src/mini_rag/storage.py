@@ -51,7 +51,9 @@ async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> 
         raise ValueError(f"Expected float32 matrix, got {embeddings.dtype}")
 
     if embeddings.shape[0] != len(chunks):
-        raise IndexAndChunksNotSyncError(f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records")
+        raise IndexAndChunksNotSyncError(
+            f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"
+        )
 
     if embeddings.shape != (manifest.records, manifest.dimension):
         raise DimensionMismatchError(

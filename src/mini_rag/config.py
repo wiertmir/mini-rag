@@ -66,9 +66,7 @@ class Config(BaseSettings):
         table = settings_cls.model_config.get("toml_table_header", ())
         if table:
             try:
-                sources.append(
-                    TomlConfigSettingsSource(settings_cls, config_file, table)
-                )
+                sources.append(TomlConfigSettingsSource(settings_cls, config_file, table))
             except KeyError:
                 pass  # the file has no table for this command
         sources.append(TomlConfigSettingsSource(settings_cls, config_file, ()))
@@ -82,16 +80,12 @@ class IngestConfig(Config):
         default=Path("data/documents.csv"),
         description="CSV manifest describing documents",
     )
-    pdf_dir: Path = Field(
-        default=Path("data/pdfs"), description="directory with PDF files"
-    )
+    pdf_dir: Path = Field(default=Path("data/pdfs"), description="directory with PDF files")
     output_dir: Path = Field(
         default=Path("index"), description="directory for chunks and ingest manifest"
     )
     chunk_size: int = Field(default=800, description="chunk size in tokens")
-    chunk_overlap: int = Field(
-        default=120, description="overlap between chunks in tokens"
-    )
+    chunk_overlap: int = Field(default=120, description="overlap between chunks in tokens")
 
     tokenizer_model: str = Field(
         default="text-embedding-3-small", description="model used to tokenize text"
@@ -111,9 +105,7 @@ class EmbedConfig(Config):
     output_dir: Path = Field(
         default=Path("index"), description="directory for the index and manifest"
     )
-    embedding_model: str = Field(
-        default="text-embedding-3-small", description="embedding model"
-    )
+    embedding_model: str = Field(default="text-embedding-3-small", description="embedding model")
     batch_size: int = Field(default=256, description="number of texts per API request")
 
 
@@ -121,9 +113,7 @@ class RetrieveConfig(Config):
     model_config = SettingsConfigDict(toml_table_header=("retrieve",))
 
     question: CliPositionalArg[str] = Field(description="user question")
-    top_k: int = Field(
-        default=5, ge=1, description="How many most similar chunks to return"
-    )
+    top_k: int = Field(default=5, ge=1, description="How many most similar chunks to return")
     index_dir: Path = Field(
         default=Path("index"), description="directory for the index and manifest"
     )
@@ -152,9 +142,7 @@ def load_config[C: Config](
             info = copy.copy(field)
             info.default = None
             resolution_fields[name] = (field.annotation | None, info)
-    resolution_model = create_model(
-        config_cls.__name__, __base__=config_cls, **resolution_fields
-    )
+    resolution_model = create_model(config_cls.__name__, __base__=config_cls, **resolution_fields)
     try:
         resolved = resolution_model()
     except ValidationError as exc:
@@ -178,9 +166,7 @@ def load_config[C: Config](
     cli_source: CliSettingsSource[Any] = CliSettingsSource(
         cli_model, root_parser=parser, cli_parse_args=False
     )
-    overrides: dict[str, Any] = cli_source(
-        args=list(argv) if argv is not None else True
-    )()
+    overrides: dict[str, Any] = cli_source(args=list(argv) if argv is not None else True)()
     try:
         return config_cls(**overrides)
     except ValidationError as exc:

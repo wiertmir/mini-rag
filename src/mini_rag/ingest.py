@@ -46,9 +46,7 @@ def parse_pdf_text(manifest: Manifest, parent_folder: Path) -> PdfDocument:
     return extract_text(pdf_path, pdf_extract_config, manifest)
 
 
-def process_document(
-    manifest: Manifest, config: IngestConfig
-) -> tuple[list[Chunk], DocumentStats]:
+def process_document(manifest: Manifest, config: IngestConfig) -> tuple[list[Chunk], DocumentStats]:
     doc = parse_pdf_text(manifest, config.pdf_dir)
     chunks: list[Chunk] = []
     log.info("Chunking file {}", doc.source_path)
@@ -107,10 +105,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         mp_context=get_context("spawn"),
         initializer=partial(rich_struct.log.configure, file=config.log_folder),
     ) as executor:
-        futures = [
-            executor.submit(process_document, manifest, config)
-            for manifest in manifests
-        ]
+        futures = [executor.submit(process_document, manifest, config) for manifest in manifests]
         for manifest, future in zip(manifests, futures, strict=True):
             docs_no += 1
             try:
@@ -148,8 +143,7 @@ def save_ingest_manifest(
 ) -> None:
     save_chunk_results(config, chunks)
     manifest_out_path = (
-        config.output_dir
-        / f"ingest_manifest_{config.chunk_size}_{config.chunk_overlap}.json"
+        config.output_dir / f"ingest_manifest_{config.chunk_size}_{config.chunk_overlap}.json"
     )
     log.info("Writing ingest manifest to {}", manifest_out_path)
 
@@ -174,9 +168,7 @@ def save_ingest_manifest(
 
 
 def save_chunk_results(config: IngestConfig, chunk_result: list[Chunk]) -> None:
-    output_path = (
-        config.output_dir / f"chunks_{config.chunk_size}_{config.chunk_overlap}.jsonl"
-    )
+    output_path = config.output_dir / f"chunks_{config.chunk_size}_{config.chunk_overlap}.jsonl"
     log.info("Writing final output to {}", output_path)
     config.output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as chunks_output:

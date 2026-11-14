@@ -40,8 +40,6 @@ def test_search_result_clamps_rounding_overshoots(
 
 
 @pytest.mark.parametrize("score", [-1.00011, 1.00011])
-def test_search_result_rejects_scores_beyond_rounding_tolerance(
-    chunk: Chunk, score: float
-) -> None:
+def test_search_result_rejects_scores_beyond_rounding_tolerance(chunk: Chunk, score: float) -> None:
     with pytest.raises(ValidationError):
         SearchResult(rank=1, score=score, chunk=chunk)

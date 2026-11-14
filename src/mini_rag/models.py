@@ -43,14 +43,14 @@ class Question(BaseModel):
 
     @model_validator(mode="after")
     def enforce_answerable_docs_constraint(self) -> "Question":
-        if not self.answerable and self.expected_documents != [_NO_DOCUMENT_SENTINEL]:
+        if not self.answerable and _NO_DOCUMENT_SENTINEL in self.expected_documents:
             raise ValueError(
-                "Non answerable question can't have any exepected documents"
+                "Non answerable question can't have any expected documents"
             )
 
-        if self.answerable and self.expected_documents == [_NO_DOCUMENT_SENTINEL]:
+        if self.answerable and (self.expected_documents == [_NO_DOCUMENT_SENTINEL] or self.expected_documents == []):
             raise ValueError(
-                "Answerable question require must have non empty expected documents"
+                "Answerable question must have non empty expected documents"
             )
 
         return self

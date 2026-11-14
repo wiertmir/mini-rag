@@ -3,3 +3,4 @@ data/pdfs/
 **/__pycache__/
 logs/
 index/
+.vscode/settings.json

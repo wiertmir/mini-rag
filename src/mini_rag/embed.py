@@ -83,7 +83,7 @@ def embed_chunks(
 
 
 async def embed_texts_async(
-    texts: AsyncIterator[str], client: AsyncOpenAI, model: str, batch_size: int
+    texts: AsyncIterator[str], client: AsyncOpenAI, model: str, batch_size: int = 256
 ) -> AsyncIterator[list[float]]:
     batch_no = 0
     total_texts = 0

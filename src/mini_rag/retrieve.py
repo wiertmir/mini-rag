@@ -20,6 +20,7 @@ from mini_rag.errors import (
     EmptyInputData,
     IndexAndChunksNotSyncError,
 )
+from mini_rag.helpers import ErrorHandler
 from mini_rag.models import Chunk, SearchResult
 from mini_rag.storage import load_index_async
 
@@ -131,13 +132,8 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    try:
+    with ErrorHandler(OpenAIError, OSError, ValueError):
         asyncio.run(_run_async(argv))
-    except (OpenAIError, OSError, ValueError) as exc:
-        Console(stderr=True).print(
-            f"Error: {exc}", style="red", markup=False, highlight=False
-        )
-        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

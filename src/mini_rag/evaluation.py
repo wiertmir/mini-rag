@@ -1,7 +1,8 @@
-from collections.abc import Iterator
+from collections.abc import Iterable
+from typing import AbstractSet
 
 
-def is_hit(expected_documents: frozenset[str], retrieved_document_ids: Iterator[str], answerable: bool) -> bool | None:
+def is_hit(expected_documents: AbstractSet[str], retrieved_document_ids: Iterable[str], answerable: bool) -> bool | None:
     if not answerable:
         return None
 

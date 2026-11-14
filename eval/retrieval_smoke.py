@@ -8,10 +8,11 @@ import aiofiles
 import rich_struct.log
 from asyncstdlib import tee
 from asyncstdlib import zip as zip_async
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 
 from mini_rag.embed import embed_texts_async
 from mini_rag.evaluation import is_hit
+from mini_rag.helpers import ErrorHandler
 from mini_rag.models import Question
 from mini_rag.retrieve import search
 from mini_rag.storage import load_index_async
@@ -44,10 +45,7 @@ async def run_async(argv: Iterable[str] | None = None):
         "--index-dir", type=str, default="index", help="Location of embeddings index and manifest"
     )
     parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="eval/results",
-        help="Location of embeddings index and manifest",
+        "--output-dir", type=str, default="eval/results", help="Results directory"
     )
 
     args = parser.parse_args(argv)
@@ -77,8 +75,7 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
         aiofiles.open(smoke_jsonl_path, mode="w", encoding="utf-8") as smoke_file,
     ):
         q_vectors = embed_texts_async(
-            (q.question async for q in embedding_questions), client, index.manifest.model, 30
-        )
+            (q.question async for q in embedding_questions), client, index.manifest.model)
         async for question, vector in zip_async(questions, q_vectors, strict=True):
             results = search(vector, index.embeddings_matrix, index.chunks, top_k)
 
@@ -89,9 +86,9 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
                 (r.chunk.document_id for r in results),
                 question.answerable,
             )
-            if hit:
+            if hit == True:
                 hit_count += 1
-            else:
+            elif hit == False:
                 missed_questions.append(question.id)
 
             record = {
@@ -128,9 +125,9 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
 
 
 def main(argv: Iterable[str] | None = None):
-    rich_struct.log.configure()
-
-    asyncio.run(run_async(argv))
+    with ErrorHandler(OpenAIError, OSError, ValueError):
+        rich_struct.log.configure()
+        asyncio.run(run_async(argv))
 
 
 if __name__ == "__main__":

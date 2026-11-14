@@ -1,4 +1,5 @@
 from types import TracebackType
+from typing import Literal
 
 from rich.console import Console
 from rich.highlighter import ReprHighlighter
@@ -18,7 +19,7 @@ class ErrorHandler:
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         traceback: TracebackType | None,
-    ) -> bool:
+    ) -> Literal[False]:
         if exc_type is None or exc is None:
             return False
         if not issubclass(exc_type, Exception):

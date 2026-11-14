@@ -77,13 +77,11 @@ def embed_chunks(
     model: str,
     batch_size: int,
 ) -> AsyncIterator[list[float]]:
-    return embed_texts_async(
-        (chunk.text async for chunk in chunks), client, model, batch_size
-    )
+    return embed_texts_async((chunk.text async for chunk in chunks), client, model, batch_size)
 
 
 async def embed_texts_async(
-    texts: AsyncIterator[str], client: AsyncOpenAI, model: str, batch_size: int
+    texts: AsyncIterator[str], client: AsyncOpenAI, model: str, batch_size: int = 256
 ) -> AsyncIterator[list[float]]:
     batch_no = 0
     total_texts = 0
@@ -132,9 +130,7 @@ async def run_embed(config: EmbedConfig, client: AsyncOpenAI) -> EmbeddingManife
             chunk_count += 1
             yield chunk
 
-    raw_embeddings = embed_chunks(
-        count_chunks(), client, config.embedding_model, config.batch_size
-    )
+    raw_embeddings = embed_chunks(count_chunks(), client, config.embedding_model, config.batch_size)
     embedding_count = 0
 
     async def validate_embedding_count() -> AsyncIterator[list[float]]:
@@ -143,9 +139,7 @@ async def run_embed(config: EmbedConfig, client: AsyncOpenAI) -> EmbeddingManife
             embedding_count += 1
             yield embedding
         if embedding_count != chunk_count:
-            raise ValueError(
-                f"Expected {chunk_count} embeddings for chunks, got {embedding_count}"
-            )
+            raise ValueError(f"Expected {chunk_count} embeddings for chunks, got {embedding_count}")
 
     try:
         embeddings = await normalize_async(validate_embedding_count())

@@ -20,6 +20,7 @@ from mini_rag.errors import (
     EmptyInputData,
     IndexAndChunksNotSyncError,
 )
+from mini_rag.helpers import ErrorHandler
 from mini_rag.models import Chunk, SearchResult
 from mini_rag.storage import load_index_async
 
@@ -83,16 +84,12 @@ async def _read_one_async(iter: AsyncIterator[list[float]]) -> list[float]:
     raise EmptyInputData("`iter` has no elements")
 
 
-async def retrieve_async(
-    config: RetrieveConfig, client: AsyncOpenAI
-) -> list[SearchResult]:
+async def retrieve_async(config: RetrieveConfig, client: AsyncOpenAI) -> list[SearchResult]:
     index, chunks, manifest = await load_index_async(config.index_dir, config.chunks)
     logger.debug("Searching for text {}", config.question)
     questions = _yield_one(config.question)
     model = manifest.model
-    question_vector = await _read_one_async(
-        embed_texts_async(questions, client, model, 1)
-    )
+    question_vector = await _read_one_async(embed_texts_async(questions, client, model, 1))
     logger.debug("Semantic searching")
     return search(question_vector, index, chunks, config.top_k)
 
@@ -131,13 +128,8 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    try:
+    with ErrorHandler(OpenAIError, OSError, ValueError):
         asyncio.run(_run_async(argv))
-    except (OpenAIError, OSError, ValueError) as exc:
-        Console(stderr=True).print(
-            f"Error: {exc}", style="red", markup=False, highlight=False
-        )
-        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

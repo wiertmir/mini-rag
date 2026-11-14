@@ -52,9 +52,7 @@ def test_ingest_passes_manifest_to_extraction(
     pdf_path.write_bytes(b"mock PDF")
     received: list[Manifest] = []
 
-    def extract(
-        pdf_path: Path, config: TextExtractionConfig, manifest: Manifest
-    ) -> PdfDocument:
+    def extract(pdf_path: Path, config: TextExtractionConfig, manifest: Manifest) -> PdfDocument:
         assert pdf_path == tmp_path / "sample.pdf"
         assert isinstance(config, TextExtractionConfig)
         received.append(manifest)

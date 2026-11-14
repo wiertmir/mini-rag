@@ -54,9 +54,7 @@ class IngestRun:
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     assert path.is_file(), f"Ingest did not create {path}"
     records: list[dict[str, Any]] = []
-    for line_number, line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), 1
-    ):
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         assert line.strip(), f"Blank JSONL line at {path}:{line_number}"
         try:
             value = json.loads(line)
@@ -168,9 +166,7 @@ def runs_800(
 
 
 @pytest.fixture(scope="session")
-def run_600(
-    tmp_path_factory: pytest.TempPathFactory, selected_manifest: Path
-) -> IngestRun:
+def run_600(tmp_path_factory: pytest.TempPathFactory, selected_manifest: Path) -> IngestRun:
     return _run_ingest(
         manifest=selected_manifest,
         pdf_dir=SOURCE_PDF_DIR,
@@ -205,9 +201,7 @@ def test_cli_writes_valid_chunks_with_traceable_metadata(
         assert not missing, f"Chunk {position} is missing fields: {sorted(missing)}"
         assert isinstance(record["chunk_id"], str) and record["chunk_id"].strip()
         assert isinstance(record["page"], int) and record["page"] >= 1
-        assert isinstance(record["source_url"], str) and record[
-            "source_url"
-        ].startswith("https://")
+        assert isinstance(record["source_url"], str) and record["source_url"].startswith("https://")
         assert isinstance(record["text"], str) and record["text"].strip()
         assert not re.search(r"[ \t]{2,}", record["text"]), (
             f"Repeated horizontal whitespace in {record['chunk_id']}"
@@ -226,9 +220,7 @@ def test_same_configuration_is_byte_for_byte_deterministic(
     first, second = runs_800
     first_digest = hashlib.sha256(first.output.read_bytes()).hexdigest()
     second_digest = hashlib.sha256(second.output.read_bytes()).hexdigest()
-    assert first_digest == second_digest, (
-        "Two identical ingest runs produced different chunk files"
-    )
+    assert first_digest == second_digest, "Two identical ingest runs produced different chunk files"
 
 
 def test_both_required_chunking_strategies_are_recorded_and_compared(

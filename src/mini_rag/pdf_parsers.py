@@ -132,19 +132,13 @@ def _read_regions(page: pymupdf.Page) -> list[_TextRegion]:
             ),
             key=lambda line: (round(line["bbox"][1] / 3), line["bbox"][0]),
         )
-        spans = [
-            span for line in selected for span in line["spans"] if span["text"].strip()
-        ]
+        spans = [span for line in selected for span in line["spans"] if span["text"].strip()]
         text = _normalize(" ".join(span["text"] for span in spans))
         if not text:
             continue
         decorative = all(span["color"] == 0xFFFFFF for span in spans) and (
             max(span["size"] for span in spans) >= 36
-            or (
-                text.isdecimal()
-                and len(text) <= 2
-                and (x1 <= 32 or x0 >= page.rect.width - 32)
-            )
+            or (text.isdecimal() and len(text) <= 2 and (x1 <= 32 or x0 >= page.rect.width - 32))
         )
         if kind == "text" and re.match(
             r"^(?:FAQ\s+\d+(?:\.\d+)*,\s*)?(?:Figure|Table)\s+\d+(?:\.\d+)*\s*[|:]",
@@ -155,16 +149,12 @@ def _read_regions(page: pymupdf.Page) -> list[_TextRegion]:
 
         cleared_txt = normalize_text(text)
         regions.append(
-            _TextRegion(
-                cleared_txt, kind, rect, bool(spans[0]["flags"] & 16), decorative
-            )
+            _TextRegion(cleared_txt, kind, rect, bool(spans[0]["flags"] & 16), decorative)
         )
     return regions
 
 
-def extract_text(
-    pdf_path: Path, config: TextExtractionConfig, manifest: Manifest
-) -> PdfDocument:
+def extract_text(pdf_path: Path, config: TextExtractionConfig, manifest: Manifest) -> PdfDocument:
     """
     Uses native text and layout classification only: no Markdown serialization,
     asset rendering/export, table-cell extraction or explicit drawing traversal.
@@ -183,9 +173,7 @@ def extract_text(
         )
         if enabled
     )
-    skipped_sections: set[str] = {
-        _normalize(name).casefold() for name in config.skip_sections
-    }
+    skipped_sections: set[str] = {_normalize(name).casefold() for name in config.skip_sections}
 
     previous: _TextRegion | None = None
     previous_page = -1
@@ -202,9 +190,7 @@ def extract_text(
             or not 1 <= number <= len(pdf_doc)
             for number in page_numbers
         ):
-            raise ValueError(
-                f"pages must contain one-based integers from 1 to {len(pdf_doc)}"
-            )
+            raise ValueError(f"pages must contain one-based integers from 1 to {len(pdf_doc)}")
 
         if tuple(sorted(set(page_numbers))) != page_numbers:
             raise ValueError("pages must be unique and in ascending order")
@@ -259,8 +245,7 @@ def extract_text(
                 if previous is not None:
                     boundary = (
                         page_number != previous_page
-                        or abs(region.rect.x0 - previous.rect.x0)
-                        >= page.rect.width * 0.3
+                        or abs(region.rect.x0 - previous.rect.x0) >= page.rect.width * 0.3
                     )
                     join = (
                         boundary

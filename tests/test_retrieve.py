@@ -47,9 +47,7 @@ def test_search_orders_results_by_score(
         chunks[2].chunk_id,
         chunks[1].chunk_id,
     ]
-    assert [result.score for result in results] == pytest.approx(
-        [1.0, 0.7071, 0.0], abs=1e-4
-    )
+    assert [result.score for result in results] == pytest.approx([1.0, 0.7071, 0.0], abs=1e-4)
 
 
 def test_search_breaks_score_ties_by_chunk_id() -> None:
@@ -108,9 +106,7 @@ def test_search_rejects_non_vector_query(
 ) -> None:
     matrix, chunks = index
 
-    with pytest.raises(
-        ValueError, match=f"Expected a 1-D query vector, got shape {shape}"
-    ):
+    with pytest.raises(ValueError, match=f"Expected a 1-D query vector, got shape {shape}"):
         search(query, matrix, chunks, top_k=3)
 
 
@@ -153,9 +149,7 @@ def test_search_normalizes_query(
     unit_results = search([1, 0], matrix, chunks, top_k=3)
     scaled_results = search([2, 0], matrix, chunks, top_k=3)
 
-    assert [result.chunk for result in scaled_results] == [
-        result.chunk for result in unit_results
-    ]
+    assert [result.chunk for result in scaled_results] == [result.chunk for result in unit_results]
     assert [result.score for result in scaled_results] == pytest.approx(
         [result.score for result in unit_results], abs=1e-4
     )
@@ -174,9 +168,7 @@ def test_search_rejects_zero_query(
 
 
 def write_chunks(path: Path, chunks: list[Chunk]) -> None:
-    path.write_text(
-        "".join(chunk.model_dump_json() + "\n" for chunk in chunks), encoding="utf-8"
-    )
+    path.write_text("".join(chunk.model_dump_json() + "\n" for chunk in chunks), encoding="utf-8")
 
 
 @pytest.fixture

@@ -1,0 +1,14 @@
+{
+  "model": "text-embedding-3-small",
+  "top_k": 5,
+  "chunks_sha256": "1fb788478defbdf03a364145bc432c6a4d9ec765011292ffbe7fd3a98c4b2259",
+  "answerable": 28,
+  "hits": 23,
+  "missed_ids": [
+    "Q01",
+    "Q02",
+    "Q07",
+    "Q11",
+    "Q27"
+  ]
+}

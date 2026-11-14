@@ -319,9 +319,7 @@ async def test_run_embed_rejects_mismatched_embedding_count_before_saving(
     run_embed_config: EmbedConfig,
 ) -> None:
     class FewerVectorsClient(FakeClient):
-        async def create(
-            self, *, model: str, input: tuple[str, ...]
-        ) -> SimpleNamespace:
+        async def create(self, *, model: str, input: tuple[str, ...]) -> SimpleNamespace:
             response = await super().create(model=model, input=input)
             response.data = response.data[:-1]
             return response
@@ -342,9 +340,7 @@ async def test_run_embed_propagates_second_batch_failure_without_output(
     failure = RuntimeError("Second batch failed")
 
     class FailingClient(FakeClient):
-        async def create(
-            self, *, model: str, input: tuple[str, ...]
-        ) -> SimpleNamespace:
+        async def create(self, *, model: str, input: tuple[str, ...]) -> SimpleNamespace:
             if len(self.calls) == 1:
                 self.calls.append((model, input))
                 raise failure

@@ -86,10 +86,10 @@ class IngestConfig(Config):
     output_dir: Path = Field(
         default=Path("index"), description="directory for chunks and ingest manifest"
     )
-    chunk_size: int = Field(default=800, description="chunk size in tokens")
-    chunk_overlap: int = Field(default=120, description="overlap between chunks in tokens")
+    chunk_size: int = Field(default=600, description="chunk size in tokens")
+    chunk_overlap: int = Field(default=90, description="overlap between chunks in tokens")
     min_chunk_tokens: int = Field(
-        default=200,
+        default=150,
         ge=0,
         description="sections below this size are merged with a neighbour (up to chunk size)",
     )

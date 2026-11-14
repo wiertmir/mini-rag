@@ -114,14 +114,14 @@
     --manifest data/documents.csv \
     --pdf-dir data/pdfs \
     --output-dir index \
-    --chunk-size 800 \
-    --chunk-overlap 120
+    --chunk-size 600 \
+    --chunk-overlap 90
   ```
 
   Ingest creates the output directory if needed and writes
   `chunks_<chunk_size>_<chunk_overlap>.jsonl` and
   `ingest_manifest_<chunk_size>_<chunk_overlap>.json` there. The command above
-  produces `index/chunks_800_120.jsonl` and `index/ingest_manifest_800_120.json`.
+  produces `index/chunks_600_90.jsonl` and `index/ingest_manifest_600_90.json`.
   Different chunking settings can share the same output directory.
   Configure it with `--output-dir`, `OUTPUT_DIR`, or `output_dir` in `[ingest]`.
 
@@ -132,7 +132,7 @@
   - Sections run across page boundaries; a chunk records the page it starts on
     (`page`) and ends on (`page_end`). `chunk_id` numbers chunks per start
     page: `<document>_p<page>_c<n>`.
-  - A section below `--min-chunk-tokens` (default 200) is merged into the
+  - A section below `--min-chunk-tokens` (default 150) is merged into the
     next one (the last section of a document merges into the previous one).
   - A section above `--chunk-size` is split into evenly sized windows sharing
     exactly `--chunk-overlap` tokens, so there are no tiny near-duplicate tails.
@@ -161,7 +161,7 @@
 
   ```bash
   python -m mini_rag.embed \
-    --chunks index/chunks_800_120.jsonl \
+    --chunks index/chunks_600_90.jsonl \
     --output-dir index
   ```
 

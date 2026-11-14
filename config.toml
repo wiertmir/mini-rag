@@ -11,9 +11,9 @@ log_folder = "logs"
 manifest = "data/documents.csv"
 pdf_dir = "data/pdfs"
 output_dir = "index"
-chunk_size = 800
-chunk_overlap = 120
-min_chunk_tokens = 200
+chunk_size = 600
+chunk_overlap = 90
+min_chunk_tokens = 150
 
 [embed]
 output_dir = "index"

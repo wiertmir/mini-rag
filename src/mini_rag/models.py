@@ -39,15 +39,40 @@ class Question(BaseModel):
 
     @model_validator(mode="after")
     def enforce_answerable_docs_constraint(self) -> "Question":
-        if not self.answerable and not _NO_DOCUMENT_SENTINEL in self.expected_documents:
+        if not self.answerable and self.expected_documents != [_NO_DOCUMENT_SENTINEL]:
             raise ValueError("Non answerable question can't have any expected documents")
 
         if self.answerable and (
-            self.expected_documents == [_NO_DOCUMENT_SENTINEL] or self.expected_documents == []
+            _NO_DOCUMENT_SENTINEL in self.expected_documents or not self.expected_documents
         ):
             raise ValueError("Answerable question must have non empty expected documents")
 
         return self
+
+
+class EvaluationRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="Question id")
+    hit: bool | None = Field(description="Whether the question was answered by retrieval")
+
+
+class RetrievedChunkRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rank: int = Field(ge=1)
+    score: float
+    chunk_id: str
+    document_id: str
+    page: int = Field(ge=1)
+
+
+class RetrievalSmokeRecord(EvaluationRecord):
+    model_config = ConfigDict(extra="forbid")
+
+    type: QuestionType
+    expected_documents: list[str]
+    top_k: list[RetrievedChunkRecord]
 
 
 class Chunk(BaseModel):

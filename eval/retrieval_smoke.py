@@ -11,9 +11,9 @@ from asyncstdlib import zip as zip_async
 from openai import AsyncOpenAI, OpenAIError
 
 from mini_rag.embed import embed_texts_async
-from mini_rag.evaluation import is_hit
+from mini_rag.evaluation import is_hit, summarize_evaluation
 from mini_rag.helpers import ErrorHandler
-from mini_rag.models import Question
+from mini_rag.models import Question, RetrievalSmokeRecord, RetrievedChunkRecord
 from mini_rag.retrieve import search
 from mini_rag.storage import load_index_async
 
@@ -63,9 +63,7 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
     smoke_summary_json_path = output_dir / "retrieval_smoke_summary.json"
     smoke_summary_json_path.unlink(missing_ok=True)
 
-    answerable_count = 0
-    hit_count = 0
-    missed_questions: list[str] = []
+    evaluation_records: list[RetrievalSmokeRecord] = []
 
     async with (
         tee(load_questions_async(questions_path)) as (questions, embedding_questions),
@@ -78,36 +76,31 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
         async for question, vector in zip_async(questions, q_vectors, strict=True):
             results = search(vector, index.embeddings_matrix, index.chunks, top_k)
 
-            if question.answerable:
-                answerable_count += 1
             hit = is_hit(
                 frozenset(question.expected_documents),
                 (r.chunk.document_id for r in results),
                 question.answerable,
             )
-            if hit == True:
-                hit_count += 1
-            elif hit == False:
-                missed_questions.append(question.id)
-
-            record = {
-                "id": question.id,
-                "type": question.type.value,
-                "expected_documents": question.expected_documents,
-                "top_k": [
-                    {
-                        "rank": r.rank,
-                        "score": r.score,
-                        "chunk_id": r.chunk.chunk_id,
-                        "document_id": r.chunk.document_id,
-                        "page": r.chunk.page,
-                    }
+            record = RetrievalSmokeRecord(
+                id=question.id,
+                type=question.type,
+                expected_documents=question.expected_documents,
+                top_k=[
+                    RetrievedChunkRecord(
+                        rank=r.rank,
+                        score=r.score,
+                        chunk_id=r.chunk.chunk_id,
+                        document_id=r.chunk.document_id,
+                        page=r.chunk.page,
+                    )
                     for r in results
                 ],
-                "hit": hit,
-            }
-            json_line = f"{json.dumps(record)}\n"
-            await smoke_file.write(json_line)
+                hit=hit,
+            )
+            evaluation_records.append(record)
+            await smoke_file.write(f"{record.model_dump_json()}\n")
+
+    answerable_count, hit_count, missed_questions = summarize_evaluation(evaluation_records)
 
     logger.info("Saving retrieval smoke evaluation summary to {}", smoke_summary_json_path)
     async with aiofiles.open(smoke_summary_json_path, mode="w", encoding="utf-8") as summary_file:

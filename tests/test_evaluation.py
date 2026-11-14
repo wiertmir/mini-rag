@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from mini_rag.evaluation import is_hit
-from mini_rag.models import Chunk, EmbeddingManifest, Question
+from mini_rag.evaluation import is_hit, summarize_evaluation
+from mini_rag.models import Chunk, EmbeddingManifest, EvaluationRecord, Question
 from mini_rag.storage import calculate_file_sha, save_index
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +32,16 @@ def test_is_hit_false_when_expected_document_is_missing() -> None:
 
 def test_is_hit_is_none_for_unanswerable_question() -> None:
     assert is_hit(frozenset({"NONE"}), iter(["NONE", "A"]), answerable=False) is None
+
+
+def test_summarize_evaluation_counts_answerable_hits_and_misses() -> None:
+    records = [
+        EvaluationRecord(id="Q1", hit=True),
+        EvaluationRecord(id="Q2", hit=False),
+        EvaluationRecord(id="Q3", hit=None),
+    ]
+
+    assert summarize_evaluation(records) == (2, 1, ["Q2"])
 
 
 # --- Question ---------------------------------------------------------------
@@ -62,6 +72,11 @@ def test_question_loads_every_line_of_the_dataset() -> None:
 def test_question_rejects_unanswerable_with_real_documents() -> None:
     with pytest.raises(ValidationError):
         Question.model_validate(question_dict(answerable=False, expected_documents=["A"]))
+
+
+def test_question_rejects_unanswerable_without_sentinel() -> None:
+    with pytest.raises(ValidationError):
+        Question.model_validate(question_dict(answerable=False, expected_documents=[]))
 
 
 def test_question_rejects_answerable_with_none_sentinel() -> None:

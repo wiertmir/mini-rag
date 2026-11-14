@@ -12,7 +12,7 @@ manifest = "data/documents.csv"
 pdf_dir = "data/pdfs"
 output_dir = "index"
 chunk_size = 800
-chunk_overlap = 150
+chunk_overlap = 120
 
 [embed]
 output_dir = "index"

@@ -161,6 +161,28 @@
   document ID, page, and text preview. API, filesystem, and validation errors
   appear in red on stderr and exit with status 1.
 
+  ### Display a document's chunks
+
+  ```bash
+  python -m mini_rag.display --document-id WGIII_CH03
+  ```
+
+  Shows every chunk of the document in a Rich table with chunk ID and full,
+  multiline text. Text shared by consecutive chunks on the same page appears
+  in a separate yellow row labelled, for example, `c001 ↔ c002`, and pages
+  are separated by lines. Chunks are read from `--chunks`, or from the
+  `chunks_path` in `<index_dir>/embedding_manifest.json` when omitted
+  (`--index-dir`, default `index`; TOML table `[display]`).
+
+  Limit the output to some pages with `--pages`, using 1-based inclusive
+  ranges separated by commas. Open ranges are allowed: `5-` means page 5 to
+  the end and `-3` means pages 1–3. Use the `=` form so a leading `-` is not
+  read as an option. A selection without chunks shows an empty table.
+
+  ```bash
+  python -m mini_rag.display --document-id WGIII_CH03 --pages="3-7,9,14-"
+  ```
+
   ### Ask a question
 
   ```bash

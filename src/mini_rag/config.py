@@ -13,9 +13,9 @@ import copy
 import os
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Self, cast
+from typing import Any, ClassVar, NamedTuple, Self, cast
 
-from pydantic import Field, ValidationError, create_model, model_validator
+from pydantic import Field, ValidationError, create_model, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliPositionalArg,
@@ -121,6 +121,61 @@ class RetrieveConfig(Config):
         default=None,
         description="Use that chunks file, instead of defined by index manifest",
     )
+
+
+class PageRange(NamedTuple):
+    first: int
+    last: int | None
+
+    def includes(self, page: int) -> bool:
+        return self.first <= page and (self.last is None or page <= self.last)
+
+
+def parse_page_ranges(spec: str) -> tuple[PageRange, ...]:
+    """Parse e.g. ``"3-7,9,14-"`` into 1-based inclusive ranges; ``-M`` starts at page 1."""
+    ranges: list[PageRange] = []
+    for item in spec.split(","):
+        first, sep, last = (part.strip() for part in item.strip().partition("-"))
+        if not (first or last) or not all(p.isdecimal() for p in (first, last) if p):
+            raise ValueError(f"invalid page range {item.strip()!r} in {spec!r}")
+        page_range = PageRange(
+            int(first) if first else 1,
+            (int(last) if last else None) if sep else int(first),
+        )
+        if page_range.first < 1 or (
+            page_range.last is not None and page_range.last < page_range.first
+        ):
+            raise ValueError(f"invalid page range {item.strip()!r} in {spec!r}")
+        ranges.append(page_range)
+    return tuple(ranges)
+
+
+class DisplayConfig(Config):
+    model_config = SettingsConfigDict(toml_table_header=("display",))
+
+    document_id: str = Field(min_length=1, description="ID of the document whose chunks to show")
+    index_dir: Path = Field(
+        default=Path("index"), description="directory for the index and manifest"
+    )
+    chunks: Path | None = Field(
+        default=None,
+        description="Use that chunks file, instead of defined by index manifest",
+    )
+    pages: str | None = Field(
+        default=None,
+        description='pages to show, e.g. "3-7,9,14-17"; open ranges "5-" and "-3" are allowed',
+    )
+
+    @field_validator("pages")
+    @classmethod
+    def _check_pages(cls, pages: str | None) -> str | None:
+        if pages is not None:
+            parse_page_ranges(pages)
+        return pages
+
+    @property
+    def page_ranges(self) -> tuple[PageRange, ...] | None:
+        return None if self.pages is None else parse_page_ranges(self.pages)
 
 
 def load_config[C: Config](

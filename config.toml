@@ -22,3 +22,6 @@ batch_size = 256
 [retrieve]
 index_dir = "index"
 top_k = 5
+
+[display]
+index_dir = "index"

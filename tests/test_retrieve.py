@@ -23,6 +23,7 @@ def make_chunk(document_id: str) -> Chunk:
         source_path=Path("dummy.pdf"),
         source_url="https://example.test/dummy.pdf",
         page=1,
+        page_end=1,
         text="Dummy text",
         token_count=2,
     )
@@ -268,15 +269,15 @@ async def test_load_index_rejects_matrix_not_matching_manifest_dimension(
 
 
 def test_preview_is_at_most_200_characters() -> None:
-    assert len(preview("x" * 500)) <= 200
+    assert len(preview("x" * 500).removesuffix("\n")) <= 200
 
 
 def test_preview_keeps_short_text() -> None:
-    assert preview("short text") == "short text"
+    assert preview("short text") == "short text\n"
 
 
 def test_preview_honours_custom_limit() -> None:
-    assert len(preview("x" * 500, limit=50)) <= 50
+    assert len(preview("x" * 500, limit=50).removesuffix("\n")) <= 50
 
 
 class FakeEmbeddings:

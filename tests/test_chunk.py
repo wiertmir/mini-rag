@@ -226,6 +226,21 @@ def test_window_ends_at_blank_line_inside_overlap_and_next_starts_at_paragraph()
     assert chunks[-1].text.endswith(paragraphs[-1])
 
 
+def test_paragraph_at_boundary_is_not_split_between_windows() -> None:
+    # Regression (WGI_CH01 p. 7): the next window snapped back to the start of a paragraph,
+    # but the previous one still ended at the token cut inside that paragraph.
+    text = paragraphs_section(60, 50, 60)
+    paragraphs = text.split("\n\n")
+    section = build_section([Block(text, 1)])
+
+    chunks = split_section(section, chunk_size=100, chunk_overlap=30)
+
+    for chunk in chunks:
+        # every chunk consists of whole paragraphs only
+        assert all(part in paragraphs for part in chunk.text.split("\n\n"))
+    assert "\n\n".join(c.text for c in chunks) == text
+
+
 def test_window_start_falls_back_to_token_cut_when_paragraph_does_not_fit() -> None:
     # One 300-token paragraph: no blank line to snap to, so plain token windows remain.
     section = build_section([Block(words(300), 1)])

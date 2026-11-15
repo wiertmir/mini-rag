@@ -95,7 +95,8 @@ async def retrieve_async(config: RetrieveConfig, client: AsyncOpenAI) -> list[Se
 
 
 def preview(text: str, limit: int = 200) -> str:
-    return text[:limit]
+    preview_text = text[:limit]
+    return preview_text if preview_text.endswith("\n") else f"{preview_text}\n"
 
 
 async def _run_async(argv: Sequence[str] | None = None) -> None:

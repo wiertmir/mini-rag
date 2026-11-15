@@ -258,41 +258,34 @@ def _balanced_windows(length: int, chunk_size: int, chunk_overlap: int) -> list[
         start += step
 
 
-def _snap_boundary(
+def _next_start(
     start: int,
     end: int,
-    next_start: int,
+    nominal_start: int,
     next_end: int,
     breaks: Sequence[int],
     fits: Callable[[int, int], bool],
-) -> tuple[int, int]:
-    """Snap the boundary between a window (start..end) and the next one to paragraphs.
+) -> int:
+    """Where the next window starts; the current window always keeps its token cut.
 
-    The next window's start is decided first, then the current window's end follows it:
-    1. Next window starts at the nearest paragraph start at or before its nominal start, if it
-       still fits in chunk_size; the current window then ends at the blank line right before
-       it, so the paragraph is not shared at all.
-    2. Otherwise, if the overlap contains blank lines, the current window ends at the last one
-       and the next starts after the first one.
-    3. Otherwise both keep the token cut (plain token overlap).
-
-    Returns (next_start, end).
+    The next window starts at the earliest paragraph start inside the current window
+    (right after a blank line) from which it still fits in chunk_size, so the shared text
+    begins at a paragraph. Without such a blank line it starts at its nominal token start.
+    The paragraph start must lie before the end of the current window, so the two windows
+    always share text and nothing is skipped.
     """
     gap = len(PARAGRAPH_BREAK)
-    paragraph_breaks = [b for b in breaks if start < b and b + gap <= next_start]
-    if paragraph_breaks and fits(paragraph_breaks[-1] + gap, next_end):
-        return paragraph_breaks[-1] + gap, paragraph_breaks[-1]
-    in_overlap = [b for b in breaks if next_start <= b < end and b > start]
-    if in_overlap:
-        return in_overlap[0] + gap, in_overlap[-1]
-    return next_start, end
+    for paragraph_start in (b + gap for b in breaks if start < b and b + gap < end):
+        if fits(paragraph_start, next_end):
+            return paragraph_start
+    return nominal_start
 
 
 def split_section(section: Section, chunk_size: int, chunk_overlap: int) -> list[TextChunk]:
     """Split a section into windows of at most chunk_size tokens.
 
-    Windows start from balanced token windows sharing chunk_overlap tokens; the boundary
-    between neighbouring windows then snaps to paragraph breaks (see _snap_boundary).
+    Windows start from balanced token windows sharing chunk_overlap tokens. Each window ends
+    at its token cut; the next one may start earlier, at a paragraph start (see _next_start).
     """
     tokens = section.tokens
     text = section.text
@@ -317,13 +310,8 @@ def split_section(section: Section, chunk_size: int, chunk_overlap: int) -> list
         end = char_at(nominal_end)
         next_start = end
         if i < last:
-            next_start, end = _snap_boundary(
-                start,
-                end,
-                char_at(windows[i + 1][0]),
-                char_at(windows[i + 1][1]),
-                breaks,
-                fits,
+            next_start = _next_start(
+                start, end, char_at(windows[i + 1][0]), char_at(windows[i + 1][1]), breaks, fits
             )
 
         chunk_text = text[start:end]

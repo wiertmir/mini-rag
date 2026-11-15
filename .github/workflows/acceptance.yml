@@ -70,4 +70,4 @@ jobs:
         run: |
           args=(-m acceptance -ra -v)
           if [ -n "$SELECT" ]; then args+=(-k "$SELECT"); fi
-          python -m pytest "${args[@]}"
+          python -m pytest acceptance_tests "${args[@]}"

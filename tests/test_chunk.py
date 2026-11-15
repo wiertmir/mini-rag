@@ -211,34 +211,33 @@ def paragraphs_section(*sizes: int) -> str:
     return "\n\n".join(words(size, "ab"[i % 2]) for i, size in enumerate(sizes))
 
 
-def test_window_ends_at_blank_line_inside_overlap_and_next_starts_at_paragraph() -> None:
-    # 3 paragraphs of 70 tokens (+ 2 breaks) with chunk_size 100 / overlap 30.
-    text = paragraphs_section(70, 70, 70)
+def test_next_window_starts_at_paragraph_inside_previous_window() -> None:
+    # The previous window keeps its token cut; the next one starts at a paragraph start.
+    text = paragraphs_section(50, 40, 50)
     paragraphs = text.split("\n\n")
+    section = build_section([Block(text, 1)])
+
+    first, second = split_section(section, chunk_size=100, chunk_overlap=30)
+
+    assert second.text == "\n\n".join(paragraphs[1:])
+    assert first.text.startswith(paragraphs[0])
+    assert not first.text.endswith(paragraphs[1])  # token cut, not shortened to a blank line
+    assert max(first.token_count, second.token_count) <= 100
+
+
+@pytest.mark.parametrize("sizes", [(60, 90, 60), (30, 150, 30), (70, 70, 70), (95, 95, 95)])
+def test_neighbouring_windows_always_share_text(sizes: tuple[int, ...]) -> None:
+    # Regression (WGI_CH01 p. 7): snapping to paragraphs must never remove the overlap.
+    text = paragraphs_section(*sizes)
     section = build_section([Block(text, 1)])
 
     chunks = split_section(section, chunk_size=100, chunk_overlap=30)
 
     assert all(c.token_count <= 100 for c in chunks)
-    assert chunks[0].text == paragraphs[0]  # ends at the blank line, not mid-paragraph
-    # every later chunk starts at the beginning of a paragraph
-    assert all(any(c.text.startswith(p) for p in paragraphs) for c in chunks[1:])
-    assert chunks[-1].text.endswith(paragraphs[-1])
-
-
-def test_paragraph_at_boundary_is_not_split_between_windows() -> None:
-    # Regression (WGI_CH01 p. 7): the next window snapped back to the start of a paragraph,
-    # but the previous one still ended at the token cut inside that paragraph.
-    text = paragraphs_section(60, 50, 60)
-    paragraphs = text.split("\n\n")
-    section = build_section([Block(text, 1)])
-
-    chunks = split_section(section, chunk_size=100, chunk_overlap=30)
-
-    for chunk in chunks:
-        # every chunk consists of whole paragraphs only
-        assert all(part in paragraphs for part in chunk.text.split("\n\n"))
-    assert "\n\n".join(c.text for c in chunks) == text
+    for previous, current in pairwise(chunks):
+        assert current.text[:20] in previous.text
+    assert text.startswith(chunks[0].text)
+    assert text.endswith(chunks[-1].text)
 
 
 def test_window_start_falls_back_to_token_cut_when_paragraph_does_not_fit() -> None:

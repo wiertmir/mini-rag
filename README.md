@@ -67,11 +67,13 @@
     ```
 
   - **Acceptance** (`.github/workflows/acceptance.yml`) runs the slow black-box
-    tests (marker `acceptance`) and is started manually at milestones:
+    tests in `acceptance_tests/` (marker `acceptance`) and is started manually at
+    milestones:
 
     ```bash
     gh workflow run acceptance.yml              # all acceptance tests
     gh workflow run acceptance.yml -f select=w01_d2
+    python -m pytest acceptance_tests -m acceptance -ra   # locally
     ```
 
     It downloads (and caches) the IPCC corpus and fails if any PDF is missing,
@@ -135,11 +137,11 @@
   - A section below `--min-chunk-tokens` (default 150) is merged into the
     next one (the last section of a document merges into the previous one).
   - A section above `--chunk-size` is split into evenly sized windows sharing
-    `--chunk-overlap` tokens, so there are no tiny near-duplicate tails. Window
-    boundaries then snap to paragraphs: a window ends at the last blank line
-    inside its overlap, and the next one starts at the beginning of the paragraph
-    containing its nominal start (if it still fits), otherwise right after the
-    first blank line in the overlap, otherwise at the token cut.
+    `--chunk-overlap` tokens, so there are no tiny near-duplicate tails. Each
+    window ends at its token cut; the next one starts at the earliest paragraph
+    start (right after a blank line) inside the previous window from which it
+    still fits in `--chunk-size`, otherwise at its token cut. Neighbouring
+    windows therefore always share text, starting at a paragraph where possible.
     Chunks of different sections do not overlap.
   - Text blocks matching `skip_patterns` (figure and table captions such as
     `Figure 1.1 | ...`, repeated `Box 1.1 (continued)` titles) are dropped.

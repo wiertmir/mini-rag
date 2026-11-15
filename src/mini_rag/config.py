@@ -11,6 +11,7 @@ table (e.g. ``[ingest]``, set via ``toml_table_header``) overrides them.
 import argparse
 import copy
 import os
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Self, cast
@@ -75,6 +76,15 @@ class Config(BaseSettings):
         return tuple(sources)
 
 
+DEFAULT_SKIP_PATTERNS = (
+    # Figure/table captions, also inside boxes: "Figure 1.1 | ...", "Box 1.1, Figure 1 | ..."
+    r"^(Cross-Chapter Box [\w.]+, )?(Box [\w.]+, )?(Figure|Table) [\w.]+ \|",
+    # Repeated box titles on following pages: "Box 1.1 (continued)"
+    r"^(Cross-Chapter )?Box [\w.]+ \(continued\)$",
+)
+DEFAULT_BOX_PATTERN = r"^(Cross-Chapter )?Box [\w.]+ \|"
+
+
 class IngestConfig(Config):
     model_config = SettingsConfigDict(toml_table_header=("ingest",))
 
@@ -94,9 +104,27 @@ class IngestConfig(Config):
         description="sections below this size are merged with a neighbour (up to chunk size)",
     )
 
+    skip_patterns: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_SKIP_PATTERNS),
+        description="regular expressions; matching text blocks (e.g. captions) are dropped",
+    )
+    box_pattern: str | None = Field(
+        default=DEFAULT_BOX_PATTERN,
+        description="regular expression for box titles; boxes move to the end of their section",
+    )
+
     tokenizer_model: str = Field(
         default="text-embedding-3-small", description="model used to tokenize text"
     )
+
+    @model_validator(mode="after")
+    def _check_patterns(self) -> Self:
+        for pattern in [*self.skip_patterns, *([self.box_pattern] if self.box_pattern else [])]:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise ValueError(f"invalid regular expression {pattern!r}: {error}") from error
+        return self
 
     @model_validator(mode="after")
     def _check_overlap(self) -> Self:

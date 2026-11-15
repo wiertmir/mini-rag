@@ -56,7 +56,12 @@ def process_document(manifest: Manifest, config: IngestConfig) -> tuple[list[Chu
         for block in page.blocks
     ]
     text_chunks = chunk_blocks(
-        blocks, config.chunk_size, config.chunk_overlap, config.min_chunk_tokens
+        blocks,
+        config.chunk_size,
+        config.chunk_overlap,
+        config.min_chunk_tokens,
+        skip_patterns=config.skip_patterns,
+        box_pattern=config.box_pattern,
     )
     # chunk_id numbers chunks per start page, so IDs stay stable and readable.
     per_page: dict[int, int] = {}
@@ -163,6 +168,8 @@ def save_ingest_manifest(
             "chunk_overlap": config.chunk_overlap,
             "strategy": "sections",
             "min_chunk_tokens": config.min_chunk_tokens,
+            "skip_patterns": config.skip_patterns,
+            "box_pattern": config.box_pattern,
         },
         "summary": {
             "documents": docs,

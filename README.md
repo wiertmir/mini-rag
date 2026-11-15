@@ -135,8 +135,23 @@
   - A section below `--min-chunk-tokens` (default 150) is merged into the
     next one (the last section of a document merges into the previous one).
   - A section above `--chunk-size` is split into evenly sized windows sharing
-    exactly `--chunk-overlap` tokens, so there are no tiny near-duplicate tails.
+    `--chunk-overlap` tokens, so there are no tiny near-duplicate tails. Window
+    boundaries then snap to paragraphs: a window ends at the last blank line
+    inside its overlap, and the next one starts at the beginning of the paragraph
+    containing its nominal start (if it still fits), otherwise right after the
+    first blank line in the overlap, otherwise at the token cut.
     Chunks of different sections do not overlap.
+  - Text blocks matching `skip_patterns` (figure and table captions such as
+    `Figure 1.1 | ...`, repeated `Box 1.1 (continued)` titles) are dropped.
+    Text interrupted by them is glued back together when the part before does
+    not end with a period and the part after starts with a lowercase letter or
+    punctuation. References such as `Figure 1.2 shows ...` are kept.
+  - A box (`box_pattern`, e.g. `Box 1.1 | ...`) starts its own section. If it
+    interrupts the main text, it is moved to the end of the section, right
+    before the next heading, and the main text is glued together.
+
+  Both patterns are regular expressions configured in `[ingest]` of
+  `config.toml`.
 
   The ingest manifest records the strategy (`"strategy": "sections"`) and
   `min_chunk_tokens` next to the size and overlap.

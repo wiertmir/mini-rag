@@ -1,3 +1,4 @@
+import re
 from itertools import pairwise
 from pathlib import Path
 
@@ -7,11 +8,18 @@ from mini_rag.chunk import (
     Block,
     build_section,
     chunk_blocks,
+    continues,
+    drop_skipped,
     encoding,
     merge_small_sections,
+    move_boxes,
     split_section,
     split_sections,
 )
+from mini_rag.config import DEFAULT_BOX_PATTERN, DEFAULT_SKIP_PATTERNS
+
+SKIP = [re.compile(p) for p in DEFAULT_SKIP_PATTERNS]
+BOX = re.compile(DEFAULT_BOX_PATTERN)
 
 VOCABULARY = {
     "a": ["cat", "dog", "sun", "sky", "red", "big", "map", "run", "sea", "car"],
@@ -73,16 +81,24 @@ def test_blank_blocks_are_ignored() -> None:
     assert split_sections([Block("  ", 1), Block("text", 1)]) == [[Block("text", 1)]]
 
 
-def test_joined_block_uses_line_break_others_paragraph_break() -> None:
+def test_joined_block_is_glued_others_get_paragraph_break() -> None:
     section = build_section(
         [
             Block("Heading", 1, heading=True),
             Block("first half", 1),
-            Block("second half", 2, joined=True),
+            Block(" second half", 2, joined=True),
         ]
     )
 
-    assert section.text == "Heading\n\nfirst half\nsecond half"
+    assert section.text == "Heading\n\nfirst half second half"
+
+
+def test_joined_block_starting_with_punctuation_is_glued_without_space() -> None:
+    section = build_section(
+        [Block("observed changes", 1), Block(", including more", 2, joined=True)]
+    )
+
+    assert section.text == "observed changes, including more"
 
 
 # --- merging small sections -----------------------------------------------------
@@ -172,7 +188,8 @@ def test_windows_are_balanced_no_near_duplicate_tail() -> None:
 
 
 def test_window_pages_follow_the_text() -> None:
-    section = build_section([Block(words(150, "a"), 1), Block(words(150, "b"), 2)])
+    # A paragraph continuing on the next page (joined): windows may span the page break.
+    section = build_section([Block(words(150, "a"), 1), Block(words(150, "b"), 2, joined=True)])
 
     chunks = split_section(section, chunk_size=100, chunk_overlap=10)
     pages = [(c.page_start, c.page_end) for c in chunks]
@@ -184,6 +201,192 @@ def test_window_pages_follow_the_text() -> None:
         found = set(chunk.text.split())
         assert bool(found & set(VOCABULARY["a"])) == (first == 1)
         assert bool(found & set(VOCABULARY["b"])) == (last == 2)
+
+
+# --- paragraph-aware windows ---------------------------------------------------
+
+
+def paragraphs_section(*sizes: int) -> str:
+    """Paragraphs of the given token sizes, separated by blank lines; vocabularies alternate."""
+    return "\n\n".join(words(size, "ab"[i % 2]) for i, size in enumerate(sizes))
+
+
+def test_window_ends_at_blank_line_inside_overlap_and_next_starts_at_paragraph() -> None:
+    # 3 paragraphs of 70 tokens (+ 2 breaks) with chunk_size 100 / overlap 30.
+    text = paragraphs_section(70, 70, 70)
+    paragraphs = text.split("\n\n")
+    section = build_section([Block(text, 1)])
+
+    chunks = split_section(section, chunk_size=100, chunk_overlap=30)
+
+    assert all(c.token_count <= 100 for c in chunks)
+    assert chunks[0].text == paragraphs[0]  # ends at the blank line, not mid-paragraph
+    # every later chunk starts at the beginning of a paragraph
+    assert all(any(c.text.startswith(p) for p in paragraphs) for c in chunks[1:])
+    assert chunks[-1].text.endswith(paragraphs[-1])
+
+
+def test_window_start_falls_back_to_token_cut_when_paragraph_does_not_fit() -> None:
+    # One 300-token paragraph: no blank line to snap to, so plain token windows remain.
+    section = build_section([Block(words(300), 1)])
+
+    chunks = split_section(section, chunk_size=100, chunk_overlap=20)
+
+    for previous, current in pairwise(chunks):
+        assert encoding.encode(previous.text)[-20:] == encoding.encode(current.text)[:20]
+
+
+def test_no_gap_between_windows() -> None:
+    text = paragraphs_section(40, 90, 15, 120, 60, 33)
+    section = build_section([Block(text, 1)])
+
+    chunks = split_section(section, chunk_size=100, chunk_overlap=20)
+
+    covered = "".join(chunks[0].text)
+    for chunk in chunks[1:]:
+        assert chunk.token_count <= 100
+        # the next chunk starts inside text already covered (overlap) or right after a break
+        head = chunk.text[:30]
+        assert head in covered or head in text
+        covered += chunk.text
+    for paragraph in text.split("\n\n"):
+        assert any(paragraph[:20] in c.text for c in chunks)
+
+
+# --- skipped blocks ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("previous", "current", "expected"),
+    [
+        ("from the near", "to the long term", True),
+        ("observed changes", ", including", True),
+        ("ends here.", "lower start", False),
+        ("no period", "Upper start", False),
+    ],
+)
+def test_continues(previous: str, current: str, expected: bool) -> None:
+    assert continues(previous, current) is expected
+
+
+@pytest.mark.parametrize(
+    "caption",
+    [
+        "Figure 1.1 | The structure of the report.",
+        "Table 2.3 | Summary.",
+        "Box 1.1, Figure 1 | The approach.",
+        "Cross-Chapter Box 1.1, Table 1 | Findings.",
+        "Box 1.1 (continued)",
+        "Cross-Chapter Box 1.2 (continued)",
+    ],
+)
+def test_caption_is_skipped(caption: str) -> None:
+    assert drop_skipped([Block(caption, 1)], SKIP) == []
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    ["Figure 1.2 shows the distribution.", "The Figure 1.1 shows it.", "Table 1.1 summarises."],
+)
+def test_reference_to_figure_is_kept(sentence: str) -> None:
+    assert drop_skipped([Block(sentence, 1)], SKIP) == [Block(sentence, 1)]
+
+
+def test_text_around_caption_is_glued_when_it_continues() -> None:
+    blocks = [
+        Block("Chapter 4 assesses projections, from the near", 1),
+        Block("Figure 1.1 | The structure of the AR6 WGI Report.", 1),
+        Block("to the long term, including 2100.", 2),
+    ]
+
+    section = build_section(drop_skipped(blocks, SKIP))
+
+    assert (
+        section.text
+        == "Chapter 4 assesses projections, from the near to the long term, including 2100."
+    )
+
+
+def test_text_around_caption_stays_separate_paragraphs_otherwise() -> None:
+    blocks = [Block("First paragraph.", 1), Block("Figure 1.1 | Caption.", 1), Block("Second.", 1)]
+
+    assert build_section(drop_skipped(blocks, SKIP)).text == "First paragraph.\n\nSecond."
+
+
+# --- boxes ------------------------------------------------------------------------
+
+
+def test_box_interrupting_text_moves_before_next_heading() -> None:
+    blocks = [
+        Block("1.1 Intro", 1, heading=True),
+        Block("The main text is cut by the", 1),
+        Block("Box 1.1 | A box", 1),
+        Block("Box paragraph is split across the", 1),
+        Block("box rest, which the reader skips.", 2),
+        Block("main text again after the box.", 2),
+        Block("Another main paragraph.", 2),
+        Block("1.2 Next", 3, heading=True),
+    ]
+
+    texts = [b.text for b in move_boxes(blocks, BOX)]
+
+    assert texts == [
+        "1.1 Intro",
+        "The main text is cut by the",
+        "main text again after the box.",
+        "Another main paragraph.",
+        "Box 1.1 | A box",
+        "Box paragraph is split across the",
+        "box rest, which the reader skips.",
+        "1.2 Next",
+    ]
+
+
+def test_box_title_is_a_heading_and_starts_a_section() -> None:
+    blocks = [Block("Main.", 1), Block("Box 1.1 | A box", 1), Block("Box text.", 1)]
+
+    sections = split_sections(move_boxes(blocks, BOX))
+
+    assert [[b.text for b in s] for s in sections] == [["Main."], ["Box 1.1 | A box", "Box text."]]
+
+
+def test_box_ending_at_numbered_heading_stays_in_place() -> None:
+    blocks = [
+        Block("Main paragraph.", 1),
+        Block("Box 1.1 | A box", 1),
+        Block("Box text.", 1),
+        Block("1.2 Next", 2, heading=True),
+    ]
+
+    assert [b.text for b in move_boxes(blocks, BOX)] == [b.text for b in blocks]
+
+
+def test_box_at_document_end_is_kept() -> None:
+    blocks = [Block("Main text without end", 1), Block("Box 1.1 | A box", 1), Block("Box text.", 1)]
+
+    assert [b.text for b in move_boxes(blocks, BOX)] == [b.text for b in blocks]
+
+
+def test_continued_main_text_is_glued_after_box_is_moved() -> None:
+    blocks = [
+        Block("1 Intro", 1, heading=True),
+        Block("The main text is cut by the", 1),
+        Block("Box 1.1 | A box", 1),
+        Block("Box text.", 1),
+        Block("box that follows.", 2),
+    ]
+
+    chunks = chunk_blocks(
+        blocks,
+        chunk_size=300,
+        chunk_overlap=30,
+        min_tokens=0,
+        skip_patterns=(),
+        box_pattern=DEFAULT_BOX_PATTERN,
+    )
+
+    assert chunks[0].text == "1 Intro\n\nThe main text is cut by the box that follows."
+    assert chunks[1].text.startswith("Box 1.1 | A box")
 
 
 # --- whole document -----------------------------------------------------------

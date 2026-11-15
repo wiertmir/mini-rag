@@ -1,14 +1,10 @@
 {
   "model": "text-embedding-3-small",
   "top_k": 5,
-  "chunks_sha256": "1fb788478defbdf03a364145bc432c6a4d9ec765011292ffbe7fd3a98c4b2259",
+  "chunks_sha256": "6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414",
   "answerable": 28,
-  "hits": 23,
+  "hits": 27,
   "missed_ids": [
-    "Q01",
-    "Q02",
-    "Q07",
-    "Q11",
-    "Q27"
+    "Q01"
   ]
 }

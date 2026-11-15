@@ -28,13 +28,16 @@ class LoadedIndex(NamedTuple):
     manifest: EmbeddingManifest
 
 
-async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> LoadedIndex:
-
+async def load_embedding_manifest_async(index_dir: Path) -> EmbeddingManifest:
     manifest_path = index_dir / "embedding_manifest.json"
     logger.info("Loading embeddings manifest from {}", manifest_path)
     async with aiofiles.open(manifest_path, mode="r", encoding="utf-8") as file:
         json_string = await file.read()
-    manifest = EmbeddingManifest.model_validate_json(json_string)
+    return EmbeddingManifest.model_validate_json(json_string)
+
+
+async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> LoadedIndex:
+    manifest = await load_embedding_manifest_async(index_dir)
 
     chunks_path = chunks_path or manifest.chunks_path
     chunks = await read_chunk_list_async(chunks_path)

@@ -11,11 +11,12 @@ table (e.g. ``[ingest]``, set via ``toml_table_header``) overrides them.
 import argparse
 import copy
 import os
+import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, ClassVar, NamedTuple, Self, cast
+from typing import Any, ClassVar, Self, cast
 
-from pydantic import Field, ValidationError, create_model, field_validator, model_validator
+from pydantic import Field, PrivateAttr, ValidationError, create_model, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliPositionalArg,
@@ -26,6 +27,8 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 from rich_argparse import RichHelpFormatter
+
+from mini_rag.pages import PageRange, parse_page_ranges
 
 CONFIG_FILE_ENV_VAR = "MINI_RAG_CONFIG"
 
@@ -73,6 +76,15 @@ class Config(BaseSettings):
         return tuple(sources)
 
 
+DEFAULT_SKIP_PATTERNS = (
+    # Figure/table captions, also inside boxes: "Figure 1.1 | ...", "Box 1.1, Figure 1 | ..."
+    r"^(Cross-Chapter Box [\w.]+, )?(Box [\w.]+, )?(Figure|Table) [\w.]+ \|",
+    # Repeated box titles on following pages: "Box 1.1 (continued)"
+    r"^(Cross-Chapter )?Box [\w.]+ \(continued\)$",
+)
+DEFAULT_BOX_PATTERN = r"^(Cross-Chapter )?Box [\w.]+ \|"
+
+
 class IngestConfig(Config):
     model_config = SettingsConfigDict(toml_table_header=("ingest",))
 
@@ -84,17 +96,42 @@ class IngestConfig(Config):
     output_dir: Path = Field(
         default=Path("index"), description="directory for chunks and ingest manifest"
     )
-    chunk_size: int = Field(default=800, description="chunk size in tokens")
-    chunk_overlap: int = Field(default=120, description="overlap between chunks in tokens")
+    chunk_size: int = Field(default=600, description="chunk size in tokens")
+    chunk_overlap: int = Field(default=90, description="overlap between chunks in tokens")
+    min_chunk_tokens: int = Field(
+        default=150,
+        ge=0,
+        description="sections below this size are merged with a neighbour (up to chunk size)",
+    )
+
+    skip_patterns: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_SKIP_PATTERNS),
+        description="regular expressions; matching text blocks (e.g. captions) are dropped",
+    )
+    box_pattern: str | None = Field(
+        default=DEFAULT_BOX_PATTERN,
+        description="regular expression for box titles; boxes move to the end of their section",
+    )
 
     tokenizer_model: str = Field(
         default="text-embedding-3-small", description="model used to tokenize text"
     )
 
     @model_validator(mode="after")
+    def _check_patterns(self) -> Self:
+        for pattern in [*self.skip_patterns, *([self.box_pattern] if self.box_pattern else [])]:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise ValueError(f"invalid regular expression {pattern!r}: {error}") from error
+        return self
+
+    @model_validator(mode="after")
     def _check_overlap(self) -> Self:
         if not 0 <= self.chunk_overlap < self.chunk_size:
             raise ValueError("chunk_overlap must be >= 0 and < chunk_size")
+        if self.min_chunk_tokens > self.chunk_size:
+            raise ValueError("min_chunk_tokens must be <= chunk_size")
         return self
 
 
@@ -123,33 +160,6 @@ class RetrieveConfig(Config):
     )
 
 
-class PageRange(NamedTuple):
-    first: int
-    last: int | None
-
-    def includes(self, page: int) -> bool:
-        return self.first <= page and (self.last is None or page <= self.last)
-
-
-def parse_page_ranges(spec: str) -> tuple[PageRange, ...]:
-    """Parse e.g. ``"3-7,9,14-"`` into 1-based inclusive ranges; ``-M`` starts at page 1."""
-    ranges: list[PageRange] = []
-    for item in spec.split(","):
-        first, sep, last = (part.strip() for part in item.strip().partition("-"))
-        if not (first or last) or not all(p.isdecimal() for p in (first, last) if p):
-            raise ValueError(f"invalid page range {item.strip()!r} in {spec!r}")
-        page_range = PageRange(
-            int(first) if first else 1,
-            (int(last) if last else None) if sep else int(first),
-        )
-        if page_range.first < 1 or (
-            page_range.last is not None and page_range.last < page_range.first
-        ):
-            raise ValueError(f"invalid page range {item.strip()!r} in {spec!r}")
-        ranges.append(page_range)
-    return tuple(ranges)
-
-
 class DisplayConfig(Config):
     model_config = SettingsConfigDict(toml_table_header=("display",))
 
@@ -166,16 +176,17 @@ class DisplayConfig(Config):
         description='pages to show, e.g. "3-7,9,14-17"; open ranges "5-" and "-3" are allowed',
     )
 
-    @field_validator("pages")
-    @classmethod
-    def _check_pages(cls, pages: str | None) -> str | None:
-        if pages is not None:
-            parse_page_ranges(pages)
-        return pages
+    _page_ranges: tuple[PageRange, ...] | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def _parse_pages(self) -> Self:
+        """Parse once at load time: an invalid selection fails before any file is read."""
+        self._page_ranges = None if self.pages is None else parse_page_ranges(self.pages)
+        return self
 
     @property
     def page_ranges(self) -> tuple[PageRange, ...] | None:
-        return None if self.pages is None else parse_page_ranges(self.pages)
+        return self._page_ranges
 
 
 def load_config[C: Config](

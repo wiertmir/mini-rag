@@ -1,7 +1,7 @@
 import hashlib
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import Final, NamedTuple
 
 import aiofiles
 import numpy as np
@@ -19,6 +19,9 @@ from mini_rag.errors import (
 )
 from mini_rag.models import Chunk, EmbeddingManifest
 
+EMBEDDINGS_FILENAME: Final[str] = "embeddings.npy"
+EMBEDDINGS_MANIFEST_FILENAME: Final[str] = "embedding_manifest.json"
+
 logger = rich_struct.log.get_logger()
 
 
@@ -29,41 +32,60 @@ class LoadedIndex(NamedTuple):
 
 
 async def load_embedding_manifest_async(index_dir: Path) -> EmbeddingManifest:
-    manifest_path = index_dir / "embedding_manifest.json"
+    manifest_path = index_dir / EMBEDDINGS_MANIFEST_FILENAME
     logger.info("Loading embeddings manifest from {}", manifest_path)
     async with aiofiles.open(manifest_path, mode="r", encoding="utf-8") as file:
         json_string = await file.read()
     return EmbeddingManifest.model_validate_json(json_string)
 
 
+async def try_load_embeddings_and_manifest_async(
+    index_dir: Path, chunks_path: Path | None = None
+) -> tuple[NDArray[np.float32], EmbeddingManifest] | None:
+    try:
+        return await load_embeddings_and_manifest_async(index_dir, chunks_path)
+    except (EOFError, OSError, ValueError) as ex:
+        logger.warning(str(ex))
+        return None
+
+
 async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> LoadedIndex:
-    manifest = await load_embedding_manifest_async(index_dir)
+    embeddings, manifest = await load_embeddings_and_manifest_async(index_dir, chunks_path)
 
     chunks_path = chunks_path or manifest.chunks_path
     chunks = await read_chunk_list_async(chunks_path)
+    if embeddings.shape[0] != len(chunks):
+        raise IndexAndChunksNotSyncError(
+            f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"
+        )
+
+    return LoadedIndex(embeddings, chunks, manifest)
+
+
+async def load_embeddings_and_manifest_async(
+    index_dir: Path, chunks_path: Path | None = None
+) -> tuple[NDArray[np.float32], EmbeddingManifest]:
+    manifest = await load_embedding_manifest_async(index_dir)
+
+    chunks_path = chunks_path or manifest.chunks_path
     chunks_sha = calculate_file_sha(chunks_path)
 
     if chunks_sha != manifest.chunks_sha256:
         raise StaleIndexError("Stale index, re-run embed")
 
-    embeddings_path = index_dir / "embeddings.npy"
+    embeddings_path = index_dir / EMBEDDINGS_FILENAME
     logger.info("Loading normalized embeddings from {}", embeddings_path)
     embeddings: NDArray[np.float32] = np.load(embeddings_path)
 
     if embeddings.dtype != np.dtype(np.float32):
         raise ValueError(f"Expected float32 matrix, got {embeddings.dtype}")
 
-    if embeddings.shape[0] != len(chunks):
-        raise IndexAndChunksNotSyncError(
-            f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"
-        )
-
     if embeddings.shape != (manifest.records, manifest.dimension):
         raise DimensionMismatchError(
             f"Embeddings shape: {embeddings.shape}, where manifest specifies {(manifest.records, manifest.dimension)}"
         )
 
-    return LoadedIndex(embeddings, chunks, manifest)
+    return (embeddings, manifest)
 
 
 def save_index(output_dir: Path, matrix: NDArray[np.float32], manifest: EmbeddingManifest) -> None:
@@ -84,8 +106,8 @@ def save_index(output_dir: Path, matrix: NDArray[np.float32], manifest: Embeddin
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    embeddings_path = output_dir / "embeddings.npy"
-    manifest_path = output_dir / "embedding_manifest.json"
+    embeddings_path = output_dir / EMBEDDINGS_FILENAME
+    manifest_path = output_dir / EMBEDDINGS_MANIFEST_FILENAME
     manifest_path.unlink(missing_ok=True)
     logger.info("Saving embeddings matrix to {}. Size={}", embeddings_path, matrix.shape)
     np.save(embeddings_path, matrix)

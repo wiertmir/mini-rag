@@ -19,6 +19,7 @@ from typing import Any, ClassVar, Self, cast
 from pydantic import Field, PrivateAttr, ValidationError, create_model, model_validator
 from pydantic_settings import (
     BaseSettings,
+    CliImplicitFlag,
     CliPositionalArg,
     CliSettingsSource,
     CliSuppress,
@@ -144,6 +145,19 @@ class EmbedConfig(Config):
     )
     embedding_model: str = Field(default="text-embedding-3-small", description="embedding model")
     batch_size: int = Field(default=256, description="number of texts per API request")
+    max_retries: int = Field(
+        default=5,
+        ge=0,
+        description="Passed to OpenAI client. It retries connection errors, 408, 409, 429 and 5xx, and respects Retry-After headers",
+    )
+    request_timeout: int = Field(
+        default=60,
+        gt=0,
+        description="Timeout in seconds. Controls how long requests wait before timing out if they don't complete",
+    )
+    force: CliImplicitFlag[bool] = Field(
+        default=False, description="Force running embedding even if input has cached output"
+    )
 
 
 class RetrieveConfig(Config):

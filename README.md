@@ -3,7 +3,7 @@
   > [!NOTE]
   > `ingest`, `embed`, `retrieve`, and `display` are implemented.
   > Answer generation (`ask`) is the next learning stage; its target output
-  > contract is documented below before the models and command are implemented.
+  > contract and Pydantic models are defined below; the command is not implemented yet.
 
   ### 1. Set up the environment
 
@@ -162,9 +162,9 @@
   Page indices are physical, 1-based and inclusive, not printed IPCC labels.
 
   Configuration precedence is CLI → environment → `.env` → TOML → defaults.
-  **The current `.env.example` still has historical `CHUNK_SIZE=800` and
-  `CHUNK_OVERLAP=120`.** If copying it, remove those overrides or set them to
-  `600` / `90` to use the current baseline. `OPENAI_API_KEY` must be a real
+  The `.env.example` uses `CHUNK_SIZE=600` and `CHUNK_OVERLAP=90`, matching
+  the current baseline. Older private `.env` files may still override these
+  with historical values; check them before ingesting. `OPENAI_API_KEY` must be a real
   key in your private environment; `<input_yours>` is only a placeholder.
   Never commit the key or an environment file containing it.
 
@@ -259,9 +259,10 @@
 
 ## Answer contract
 
-**Target contract for learning issue #14.** The models below and the `ask`
-command are not implemented yet at this documentation commit. This section
-specifies what Mirek will implement; Szpan maintains the documentation.
+**Answer contract for learning issue #14.** `LlmAnswer`, `Citation`, and
+`Answer` are defined in `src/mini_rag/models.py`. The `ask` command and the
+reference-resolution pipeline remain planned. Szpan maintains this
+documentation; the constraints below specify the required model contract.
 
 ### Model output versus system output
 
@@ -313,6 +314,12 @@ The final model enforces:
 
 - `insufficient_evidence=true` → `citations` must be empty.
 - `insufficient_evidence=false` → at least one citation is required.
+- Citation `ref` values must be unique.
+- Every cited `chunk_id` must occur in `retrieved_chunk_ids`.
+
+These last two checks catch duplicate references and citations outside the
+retrieved set. Mapping each reference to the correct ranked chunk remains
+the responsibility of the reference-resolution pipeline (issue #17).
 
 A refusal may still have retrieved chunks: retrieval can find passages that
 are not sufficient to answer. Keeping their IDs lets evaluation distinguish

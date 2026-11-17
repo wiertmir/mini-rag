@@ -1,9 +1,9 @@
 ## Running the project
 
   > [!NOTE]
-  > The project is currently at the environment and data preparation stage.
-  > The `ingest`, `embed`, `retrieve`, and `ask` commands will be implemented
-  > during the following development stages.
+  > `ingest`, `embed`, `retrieve`, and `display` are implemented.
+  > Answer generation (`ask`) is the next learning stage; its target output
+  > contract is documented below before the models and command are implemented.
 
   ### 1. Set up the environment
 
@@ -16,7 +16,7 @@
   pyenv local 3.13.15
 
   python -m pip install --upgrade pip
-  pip install -e ".[dev]"
+  python -m pip install -e ".[dev]"
   ```
 
   ### 2. Verify the installation
@@ -104,10 +104,10 @@
 
   No output and an exit code of `0` mean that all checks passed.
 
-  ## Planned usage
+  ## Pipeline usage
 
-  The following commands describe the intended project interface. They have not
-  been implemented yet.
+  Ingestion, embeddings, retrieval and chunk display are available. The `ask`
+  example is explicitly marked as planned.
 
   ### Process the documents
 
@@ -155,10 +155,24 @@
   Both patterns are regular expressions configured in `[ingest]` of
   `config.toml`.
 
+  Current defaults are `600/90` with `min_chunk_tokens=150`. The checked
+  local corpus has 6,264 chunks; use the manifest counts rather than treating
+  that number as an invariant for other configurations. A chunk ID encodes
+  its **start** page only; use `page_end` for the end of its source range.
+  Page indices are physical, 1-based and inclusive, not printed IPCC labels.
+
+  Configuration precedence is CLI → environment → `.env` → TOML → defaults.
+  **The current `.env.example` still has historical `CHUNK_SIZE=800` and
+  `CHUNK_OVERLAP=120`.** If copying it, remove those overrides or set them to
+  `600` / `90` to use the current baseline. `OPENAI_API_KEY` must be a real
+  key in your private environment; `<input_yours>` is only a placeholder.
+  Never commit the key or an environment file containing it.
+
   The ingest manifest records the strategy (`"strategy": "sections"`) and
   `min_chunk_tokens` next to the size and overlap.
 
-  The storage readers `mini_rag.storage.read_chunks` and `read_chunks_async`
+  The storage readers `mini_rag.storage.read_chunks_async` and
+  `read_chunk_list_async`
   raise `ChunkParseError` for malformed JSON and `ChunkValidationError` for
   records that do not satisfy the chunk schema. Both inherit from
   `ChunkReadError`, expose `path` and the 1-based `line_no`, and preserve the
@@ -171,6 +185,18 @@
   no default; provide it with `--chunks`, `CHUNKS`, or the TOML table.
   Defaults are `output_dir = "index"`,
   `embedding_model = "text-embedding-3-small"`, and `batch_size = 256`.
+
+  The SDK handles retries with exponential backoff: `max_retries=5` and
+  `request_timeout=60` seconds by default (per request / batch). Use
+  `--max-retries` and `--request-timeout` to override them.
+
+  An unchanged chunk hash and embedding model with a usable cached matrix
+  produce an "Index is up to date" message and no embedding API calls; this
+  path does not parse chunks. Missing or corrupt cache artifacts trigger a
+  rebuild. `--force` forces recomputation; `force` may also be set persistently
+  through configuration. Changing only the input path, mtime or batch size
+  does not invalidate the cache. Reuse the existing artifacts when adapting
+  the project to a framework; do not pay to embed the same corpus again.
 
   `mini_rag.embed.save_index` requires a NumPy matrix with dtype `float32`.
   Other dtypes raise `TypeError` before creating the output directory or
@@ -219,7 +245,7 @@
   python -m mini_rag.display --document-id WGIII_CH03 --pages="3-7,9,14-"
   ```
 
-  ### Ask a question
+  ### Ask a question (planned — not implemented yet)
 
   ```bash
   python -m mini_rag.ask \
@@ -233,39 +259,116 @@
 
 ## Answer contract
 
-Program returns:
+**Target contract for learning issue #14.** The models below and the `ask`
+command are not implemented yet at this documentation commit. This section
+specifies what Mirek will implement; Szpan maintains the documentation.
 
-- `answer: str` — answer solely based on found context,
-- `citations: list[Citation]` — document ids and pages,
-- `insufficient_evidence: bool` — info depicting if documents provide enough to return the answer.
+### Model output versus system output
 
-If data is not sufficient:
+The LLM produces **`LlmAnswer`**, not the final `Answer`:
 
-- `answer` contains the message about lack of information,
-- `citations` is an empty list,
-- `insufficient_evidence` have value `true`.
+| Field | Type | Meaning |
+|---|---|---|
+| `answer` | `str` | Answer text with context markers such as `[1]` |
+| `cited_refs` | `list[int]` | Numbers of the context fragments used |
+| `insufficient_evidence` | `bool` | Whether the supplied context is insufficient |
 
-### Valid answer
+All three fields are required. This is the structured-output schema sent to
+OpenAI. It intentionally accepts an inconsistent refusal with refs: the
+application handles that inconsistency rather than losing it inside SDK
+parsing. Refusal invariants belong on the final `Answer`.
+
+Context fragments are numbered `1..n` in retrieval order. The application maps
+these numbers to the retrieved `Chunk` objects and resolves each cited number
+into a **`Citation`**. The model never supplies document IDs or page numbers.
+An unknown reference is an error, not a source to invent; repeated references
+produce one citation in a deterministic order (issue #17).
+
+| `Citation` field | Type / constraint | Source |
+|---|---|---|
+| `ref` | `int >= 1` | Context fragment number |
+| `chunk_id` | `str` | Retrieved chunk ID |
+| `document_id` | `str` | Retrieved chunk's document ID |
+| `page` | `int >= 1` | Retrieved chunk's first physical PDF page |
+| `page_end` | `int >= page` | Retrieved chunk's last physical PDF page, inclusive |
+
+Both page endpoints are copied from chunk metadata, never generated by the
+LLM. Section chunks can span several pages. A single-page citation has equal
+endpoints; a reversed range is invalid. The page encoded in a chunk ID is only
+its start page. These are **1-based physical PDF page indices**, not printed
+labels such as `1-5` or `TS-12`. A citation identifies the source range; it does
+not claim that every sentence in that range supports the answer. Factual
+support still needs evaluation.
+
+The final **`Answer`** has four required fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `answer` | `str` | Context-grounded answer, or refusal text |
+| `citations` | `list[Citation]` | Sources resolved by application code |
+| `insufficient_evidence` | `bool` | Explicit refusal flag |
+| `retrieved_chunk_ids` | `list[str]` | **All** retrieved chunks in ranking order, not only cited chunks |
+
+The final model enforces:
+
+- `insufficient_evidence=true` → `citations` must be empty.
+- `insufficient_evidence=false` → at least one citation is required.
+
+A refusal may still have retrieved chunks: retrieval can find passages that
+are not sufficient to answer. Keeping their IDs lets evaluation distinguish
+"not retrieved" from "retrieved but not cited". No retrieval means an empty
+`retrieved_chunk_ids` list. A fixed refusal sentence is a design choice, not a
+required exact string.
+
+### Example answer (illustrative schema, not a measured model result)
+
+The LLM might return:
 
 ```json
 {
-"answer": "Transport accounts for approximately 15% of global greenhouse-gas emissions.",
-"citations": [
-    {
-    "document_id": "WGIII_CH10",
-    "page": 1052
-    }
-],
-"insufficient_evidence": false
+  "answer": "Mitigation reduces emissions [1]; adaptation adjusts systems to climate impacts [3].",
+  "cited_refs": [1, 3],
+  "insufficient_evidence": false
 }
 ```
 
-### Not enough information answer
+After validating references against the numbered context, the system returns:
 
 ```json
 {
-"answer": "There is insufficient information in the provided documents.",
-"citations": [],
-"insufficient_evidence": true
+  "answer": "Mitigation reduces emissions [1]; adaptation adjusts systems to climate impacts [3].",
+  "citations": [
+    {
+      "ref": 1,
+      "chunk_id": "WGIII_CH01_p006_c001",
+      "document_id": "WGIII_CH01",
+      "page": 6,
+      "page_end": 7
+    },
+    {
+      "ref": 3,
+      "chunk_id": "WGI_CH01_p012_c002",
+      "document_id": "WGI_CH01",
+      "page": 12,
+      "page_end": 12
+    }
+  ],
+  "insufficient_evidence": false,
+  "retrieved_chunk_ids": [
+    "WGIII_CH01_p006_c001",
+    "WGIII_CH02_p010_c001",
+    "WGI_CH01_p012_c002"
+  ]
+}
+```
+
+### Example refusal after retrieval
+
+```json
+{
+  "answer": "There is insufficient information in the provided documents.",
+  "citations": [],
+  "insufficient_evidence": true,
+  "retrieved_chunk_ids": ["WGIII_CH01_p006_c001"]
 }
 ```

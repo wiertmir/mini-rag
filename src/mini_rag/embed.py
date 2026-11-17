@@ -21,7 +21,12 @@ from openai import AsyncOpenAI
 from mini_rag.config import EmbedConfig, HelpFormatter, load_config
 from mini_rag.errors import EmptyInputData
 from mini_rag.models import Chunk, EmbeddingManifest
-from mini_rag.storage import calculate_file_sha, read_chunks_async, save_index, try_load_index_async
+from mini_rag.storage import (
+    calculate_file_sha,
+    read_chunks_async,
+    save_index,
+    try_load_embeddings_and_manifest_async,
+)
 
 logger = rich_struct.log.get_logger()
 
@@ -129,25 +134,28 @@ async def run_embed(
     chunks_sha = calculate_file_sha(config.chunks)
 
     if config.force:
-        logger.warning("Forced exexution. Checking previous results is skipped")
+        logger.warning("Forced execution. Checking previous results is skipped")
     else:
         logger.info("Checking previous embeddings")
-        current_index = await try_load_index_async(config.output_dir, config.chunks)
-        if current_index:
+        cached_index = await try_load_embeddings_and_manifest_async(
+            config.output_dir, config.chunks
+        )
+        if cached_index:
+            _, prev_manifest = cached_index
             logger.debug(
                 "Previous manifest '{}' and embeddings '{}' exist. Let's check if they are already updated",
                 config.output_dir,
                 config.chunks,
             )
             if (
-                chunks_sha == current_index.manifest.chunks_sha256
-                and config.embedding_model == current_index.manifest.model
+                chunks_sha == prev_manifest.chunks_sha256
+                and config.embedding_model == prev_manifest.model
             ):
                 logger.warning(
                     "Index is up to date. Returning previous result from {}",
-                    current_index.manifest.created_at,
+                    prev_manifest.created_at,
                 )
-                return (EmbeddingStatus.SKIPPED, current_index.manifest)
+                return (EmbeddingStatus.SKIPPED, prev_manifest)
 
     logger.info("Reading chunks from file {}", config.chunks)
     chunks = read_chunks_async(config.chunks)

@@ -164,7 +164,7 @@ class EmbeddingManifest(BaseModel):
 
 class Manifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    
+
     id: str = Field(description="Id of the whole source document")
     title: str = Field(description="Document title")
     url: str = Field(description="Url of the source")
@@ -174,14 +174,21 @@ class Manifest(BaseModel):
 
 class LlmAnswer(BaseModel):
     """The LLM's output schema"""
+
     model_config = ConfigDict(extra="forbid")
 
     answer: str = Field(description="Answer text with inline markers like [1], [3]")
-    cited_refs: list[int] = Field(description="The fragment numbers the answer relies on (numners in square brackets referenced by `answer`)")
-    insufficient_evidence: bool = Field(description="True - When fragments do not contain the answer")
+    cited_refs: list[int] = Field(
+        description="The fragment numbers the answer relies on (numners in square brackets referenced by `answer`)"
+    )
+    insufficient_evidence: bool = Field(
+        description="True - When fragments do not contain the answer"
+    )
+
 
 class Citation(BaseModel):
     """Resolved source"""
+
     model_config = ConfigDict(extra="forbid")
 
     ref: int = Field(ge=1, description="The number from context")

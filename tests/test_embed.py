@@ -270,6 +270,7 @@ def run_embed_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> EmbedCo
             source_path=tmp_path / "sample.pdf",
             source_url="https://example.test/sample.pdf",
             page=1,
+            page_end=1,
             text=text,
             token_count=1,
         )
@@ -293,7 +294,7 @@ async def test_run_embed_writes_index_and_manifest(
     config = run_embed_config
     client = FakeClient()
 
-    returned_manifest = await run_embed(config, cast(AsyncOpenAI, client))
+    _, returned_manifest = await run_embed(config, cast(AsyncOpenAI, client))
 
     matrix = np.load(config.output_dir / "embeddings.npy", allow_pickle=False)
     manifest = EmbeddingManifest.model_validate_json(

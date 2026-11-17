@@ -21,7 +21,8 @@
             "request": "launch",
             "module": "mini_rag.embed",
             "args": [
-                
+                "--chunks",
+                "index/chunks_600_90.jsonl"
             ]
         }
     ]

@@ -1,7 +1,7 @@
 import hashlib
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import Final, NamedTuple
 
 import aiofiles
 import numpy as np
@@ -19,6 +19,9 @@ from mini_rag.errors import (
 )
 from mini_rag.models import Chunk, EmbeddingManifest
 
+EMBEDDINGS_FILENAME: Final[str] = "embeddings.npy"
+EMBEDDINGS_MANIFEST_FILENAME: Final[str] = "embedding_manifest.json"
+
 logger = rich_struct.log.get_logger()
 
 
@@ -29,11 +32,21 @@ class LoadedIndex(NamedTuple):
 
 
 async def load_embedding_manifest_async(index_dir: Path) -> EmbeddingManifest:
-    manifest_path = index_dir / "embedding_manifest.json"
+    manifest_path = index_dir / EMBEDDINGS_MANIFEST_FILENAME
     logger.info("Loading embeddings manifest from {}", manifest_path)
     async with aiofiles.open(manifest_path, mode="r", encoding="utf-8") as file:
         json_string = await file.read()
     return EmbeddingManifest.model_validate_json(json_string)
+
+
+async def try_load_index_async(
+    index_dir: Path, chunks_path: Path | None = None
+) -> LoadedIndex | None:
+    try:
+        return await load_index_async(index_dir, chunks_path)
+    except (OSError, ValueError) as ex:
+        logger.warning(str(ex))
+        return None
 
 
 async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> LoadedIndex:
@@ -46,7 +59,7 @@ async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> 
     if chunks_sha != manifest.chunks_sha256:
         raise StaleIndexError("Stale index, re-run embed")
 
-    embeddings_path = index_dir / "embeddings.npy"
+    embeddings_path = index_dir / EMBEDDINGS_FILENAME
     logger.info("Loading normalized embeddings from {}", embeddings_path)
     embeddings: NDArray[np.float32] = np.load(embeddings_path)
 
@@ -84,8 +97,8 @@ def save_index(output_dir: Path, matrix: NDArray[np.float32], manifest: Embeddin
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    embeddings_path = output_dir / "embeddings.npy"
-    manifest_path = output_dir / "embedding_manifest.json"
+    embeddings_path = output_dir / EMBEDDINGS_FILENAME
+    manifest_path = output_dir / EMBEDDINGS_MANIFEST_FILENAME
     manifest_path.unlink(missing_ok=True)
     logger.info("Saving embeddings matrix to {}. Size={}", embeddings_path, matrix.shape)
     np.save(embeddings_path, matrix)

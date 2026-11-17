@@ -9,6 +9,7 @@ SHA-256 of the chunk file, used to detect a stale index).
 import argparse
 import asyncio
 from collections.abc import AsyncIterator, Sequence
+from enum import StrEnum
 from time import perf_counter
 
 import numpy as np
@@ -20,7 +21,7 @@ from openai import AsyncOpenAI
 from mini_rag.config import EmbedConfig, HelpFormatter, load_config
 from mini_rag.errors import EmptyInputData
 from mini_rag.models import Chunk, EmbeddingManifest
-from mini_rag.storage import calculate_file_sha, read_chunks_async, save_index
+from mini_rag.storage import calculate_file_sha, read_chunks_async, save_index, try_load_index_async
 
 logger = rich_struct.log.get_logger()
 
@@ -117,11 +118,40 @@ async def embed_texts_async(
     )
 
 
-async def run_embed(config: EmbedConfig, client: AsyncOpenAI) -> EmbeddingManifest:
-    logger.info("Reading chunks from file {}", config.chunks)
+class EmbeddingStatus(StrEnum):
+    SKIPPED = "skipped"
+    REBUILT = "rebuilt"
 
+
+async def run_embed(
+    config: EmbedConfig, client: AsyncOpenAI
+) -> tuple[EmbeddingStatus, EmbeddingManifest]:
     chunks_sha = calculate_file_sha(config.chunks)
+
+    if config.force:
+        logger.warning("Forced exexution. Checking previous results is skipped")
+    else:
+        logger.info("Checking previous embeddings")
+        current_index = await try_load_index_async(config.output_dir, config.chunks)
+        if current_index:
+            logger.debug(
+                "Previous manifest '{}' and embeddings '{}' exist. Let's check if they are already updated",
+                config.output_dir,
+                config.chunks,
+            )
+            if (
+                chunks_sha == current_index.manifest.chunks_sha256
+                and config.embedding_model == current_index.manifest.model
+            ):
+                logger.warning(
+                    "Index is up to date. Returning previous result from {}",
+                    current_index.manifest.created_at,
+                )
+                return (EmbeddingStatus.SKIPPED, current_index.manifest)
+
+    logger.info("Reading chunks from file {}", config.chunks)
     chunks = read_chunks_async(config.chunks)
+
     chunk_count = 0
 
     async def count_chunks() -> AsyncIterator[Chunk]:
@@ -156,7 +186,7 @@ async def run_embed(config: EmbedConfig, client: AsyncOpenAI) -> EmbeddingManife
 
     save_index(config.output_dir, embeddings, manifest)
 
-    return manifest
+    return (EmbeddingStatus.REBUILT, manifest)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -172,7 +202,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger.info("Starting the embed app")
 
     async def run() -> None:
-        async with AsyncOpenAI() as client:
+        async with AsyncOpenAI(
+            max_retries=config.max_retries, timeout=config.request_timeout
+        ) as client:
             await run_embed(config, client)
 
     asyncio.run(run())

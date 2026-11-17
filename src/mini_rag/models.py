@@ -197,6 +197,12 @@ class Citation(BaseModel):
     page: int = Field(ge=1, description="Starting page when chunks starts")
     page_end: int = Field(ge=1, description="Page where chunks ends")
 
+    @model_validator(mode="after")
+    def validate_citation(self) -> Self:
+        if self.page > self.page_end:
+            raise ValueError("`page` must be before `page_end`")
+        return self
+
 
 class Answer(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -209,7 +215,7 @@ class Answer(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_citations(self) -> Self:
+    def validate_answer(self) -> Self:
         if self.insufficient_evidence and self.citations:
             raise ValueError("An answer with insufficient evidence must not have citations")
         if not self.insufficient_evidence and not self.citations:

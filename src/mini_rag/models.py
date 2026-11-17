@@ -225,5 +225,5 @@ class Answer(BaseModel):
             raise ValueError("Citation refs must be unique")
         for citation in self.citations:
             if citation.chunk_id not in self.retrieved_chunk_ids:
-                raise ValueError("Citation must come from passed `retrieved _chunks_id`")
+                raise ValueError("Citation must come from passed `retrieved _chunks_ids`")
         return self

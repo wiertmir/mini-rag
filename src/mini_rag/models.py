@@ -163,8 +163,67 @@ class EmbeddingManifest(BaseModel):
 
 
 class Manifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str = Field(description="Id of the whole source document")
     title: str = Field(description="Document title")
     url: str = Field(description="Url of the source")
     year: str = Field(description="Publish year")
     collection: str = Field(description="The bigger set document belongs to. Usefull for filtering")
+
+
+class LlmAnswer(BaseModel):
+    """The LLM's output schema"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = Field(description="Answer text with inline markers like [1], [3]")
+    cited_refs: list[int] = Field(
+        description="The fragment numbers the answer relies on (numners in square brackets referenced by `answer`)"
+    )
+    insufficient_evidence: bool = Field(
+        description="True - When fragments do not contain the answer"
+    )
+
+
+class Citation(BaseModel):
+    """Resolved source"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: int = Field(ge=1, description="The number from context")
+    chunk_id: str = Field(description="Chunk identifier")
+    document_id: str = Field(description="Source document identifier")
+    page: int = Field(ge=1, description="Starting page when chunks starts")
+    page_end: int = Field(ge=1, description="Page where chunks ends")
+
+    @model_validator(mode="after")
+    def validate_citation(self) -> Self:
+        if self.page > self.page_end:
+            raise ValueError("`page` must be before `page_end`")
+        return self
+
+
+class Answer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = Field(description="Answer text")
+    citations: list[Citation] = Field(description="Resolved citations in the answer")
+    insufficient_evidence: bool = Field(description="Whether there is insufficient evidence")
+    retrieved_chunk_ids: list[str] = Field(
+        description="All retrieved chunk IDs in ranking order, including uncited chunks"
+    )
+
+    @model_validator(mode="after")
+    def validate_answer(self) -> Self:
+        if self.insufficient_evidence and self.citations:
+            raise ValueError("An answer with insufficient evidence must not have citations")
+        if not self.insufficient_evidence and not self.citations:
+            raise ValueError("An answer with sufficient evidence must have at least one citation")
+        refs = [citation.ref for citation in self.citations]
+        if len(refs) != len(set(refs)):
+            raise ValueError("Citation refs must be unique")
+        for citation in self.citations:
+            if citation.chunk_id not in self.retrieved_chunk_ids:
+                raise ValueError("Citation must come from passed `retrieved _chunks_ids`")
+        return self

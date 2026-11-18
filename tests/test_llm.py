@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -6,7 +7,7 @@ from openai import AsyncOpenAI
 from pydantic import ValidationError
 
 from mini_rag.config import AskConfig
-from mini_rag.errors import RefusalError
+from mini_rag.errors import MissingParsedOutputError
 from mini_rag.llm import AnswerGenerator, OpenAIAnswerGenerator
 from mini_rag.models import LlmAnswer
 from mini_rag.prompts import SYSTEM_PROMPT
@@ -81,15 +82,21 @@ async def test_no_parsed_output_raises_diagnostic_error(mode: str) -> None:
             status="incomplete", incomplete_details=SimpleNamespace(reason="max_output_tokens")
         )
     generator, _ = make_generator(**details)
-    with pytest.raises(RefusalError) as caught:
+    with pytest.raises(MissingParsedOutputError) as caught:
         await generator.generate_async("question", ("context", {}))
     assert caught.value.model == "configured-model"
     assert caught.value.response_id == "resp_test"
     if mode == "safety":
         assert caught.value.refusal == "Safety refusal"
+        assert "Safety refusal" in str(caught.value)
     if mode == "incomplete":
         assert caught.value.incomplete_reason == "max_output_tokens"
         assert caught.value.status == "incomplete"
+        assert "Generation incomplete" in str(caught.value)
+        assert "refused" not in str(caught.value).lower()
+        assert "max_output_tokens" in str(caught.value)
+    if mode == "missing":
+        assert "No parsed output returned" in str(caught.value)
 
 
 async def test_usage_logging_excludes_context(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,3 +142,17 @@ def test_ask_config_precedence(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -
     assert AskConfig().answer_model == "env-model"
     assert AskConfig(answer_model="explicit-model").answer_model == "explicit-model"
     assert AskConfig().top_k == 3
+
+
+def test_ask_index_dir_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MINI_RAG_CONFIG", raising=False)
+    monkeypatch.delenv("INDEX_DIR", raising=False)
+    assert AskConfig().index_dir == Path("index")
+    (tmp_path / "config.toml").write_text('[ask]\nindex_dir="toml-index"\n')
+    assert AskConfig().index_dir == Path("toml-index")
+    (tmp_path / ".env").write_text("INDEX_DIR=dotenv-index\n")
+    assert AskConfig().index_dir == Path("dotenv-index")
+    monkeypatch.setenv("INDEX_DIR", "env-index")
+    assert AskConfig().index_dir == Path("env-index")
+    assert AskConfig(index_dir=Path("explicit-index")).index_dir == Path("explicit-index")

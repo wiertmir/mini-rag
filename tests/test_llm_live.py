@@ -5,7 +5,6 @@ No document embeddings are regenerated. An exported OPENAI_API_KEY is required.
 """
 
 import hashlib
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -22,7 +21,7 @@ pytestmark = pytest.mark.live
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def fixed_context() -> tuple[str, dict[int, Chunk]]:
-    loaded = await load_index_async(Path("index"))
+    loaded = await load_index_async(AskConfig().index_dir)
     chunk = next(c for c in loaded.chunks if c.chunk_id == "WGIII_CH07_p008_c001")
     assert (
         hashlib.sha256(chunk.text.encode()).hexdigest()

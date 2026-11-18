@@ -35,5 +35,6 @@ top_k = 5
 # index_dir defaults to "index"; chunks defaults to the manifest's chunks_path
 
 [ask]
+index_dir = "index"
 answer_model = "gpt-5.4-mini"
 top_k = 5

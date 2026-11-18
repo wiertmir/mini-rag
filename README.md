@@ -268,7 +268,9 @@ question as a user message, `SYSTEM_PROMPT` as a system message, and
 `AsyncOpenAI` client and model name; the caller owns the client's lifetime.
 
 `AskConfig` reads `[ask]` in `config.toml`: `answer_model` currently defaults
-to `gpt-5.4-mini`, and `top_k` to `5` (at least `1`). Configuration precedence
+to `gpt-5.4-mini`, `top_k` to `5` (at least `1`), and `index_dir` to `index`.
+The index manifest selects the matching chunk file; a separate chunk-path
+setting is not needed. Configuration precedence
 is the same as for other commands. The notebook is an exploratory example;
 the complete `ask` CLI and reference resolution remain planned.
 
@@ -277,10 +279,11 @@ client. A key stored only in `.env` is not automatically exported by
 Pydantic settings. Never commit credentials.
 
 A parsed answer with `insufficient_evidence=true` is a normal application
-refusal. Missing parsed output raises `RefusalError`; its attributes include
+refusal. Missing parsed output raises `MissingParsedOutputError`; its attributes include
 the response ID, status, safety refusal text (if present), and incomplete
-reason (if present). Currently this exception also covers incomplete
-responses: inspect the status/reason rather than assuming a safety refusal.
+reason (if present). Error messages distinguish safety refusals, incomplete
+responses and otherwise missing parsed output; inspect the status/reason
+for programmatic handling.
 Transport/API errors propagate to the caller. INFO logs include model,
 latency and token usage, not the full question or context.
 

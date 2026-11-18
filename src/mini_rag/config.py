@@ -258,3 +258,7 @@ class AskConfig(Config):
 
     answer_model: str = Field(default="gpt-5.4-mini", description="Model that generates the answer")
     top_k: int = Field(default=5, ge=1, description="How many fragments go into the context")
+
+    index_dir: Path = Field(
+        default=Path("index"), description="directory for the index and manifest"
+    )

@@ -4,7 +4,7 @@ from typing import Protocol, runtime_checkable
 import rich_struct.log
 from openai import AsyncOpenAI
 
-from mini_rag.errors import RefusalError
+from mini_rag.errors import MissingParsedOutputError
 from mini_rag.models import Chunk, LlmAnswer
 from mini_rag.prompts import SYSTEM_PROMPT
 
@@ -81,7 +81,7 @@ Data fragments, your all knowledge base is below (wrapped by tripple ```):
         incomplete_reason = (
             response.incomplete_details.reason if response.incomplete_details else None
         )
-        raise RefusalError(
+        raise MissingParsedOutputError(
             model=self._model_name,
             response_id=response.id,
             status=response.status,

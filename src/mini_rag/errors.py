@@ -48,8 +48,8 @@ class DocumentNotFoundError(ValueError):
     """The chunks file has no chunks for the requested document"""
 
 
-class RefusalError(Exception):
-    """Raised when AI API safety filters refuse to generate content."""
+class MissingParsedOutputError(Exception):
+    """Raised when generation returns no parsed answer, including refusal or incomplete output."""
 
     def __init__(
         self,
@@ -67,5 +67,10 @@ class RefusalError(Exception):
         details = f"model={model}, response_id={response_id}, status={status}"
         if incomplete_reason:
             details += f", incomplete_reason={incomplete_reason}"
-        reason = refusal or "no parsed output returned"
-        super().__init__(f"Model refused to answer: {reason} ({details})")
+        if refusal:
+            reason = f"Safety refusal: {refusal}"
+        elif status == "incomplete" or incomplete_reason:
+            reason = "Generation incomplete"
+        else:
+            reason = "No parsed output returned"
+        super().__init__(f"{reason} ({details})")

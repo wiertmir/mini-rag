@@ -46,3 +46,26 @@ class StaleIndexError(ValueError):
 
 class DocumentNotFoundError(ValueError):
     """The chunks file has no chunks for the requested document"""
+
+
+class RefusalError(Exception):
+    """Raised when AI API safety filters refuse to generate content."""
+
+    def __init__(
+        self,
+        model: str,
+        response_id: str,
+        status: str | None,
+        refusal: str | None = None,
+        incomplete_reason: str | None = None,
+    ) -> None:
+        self.model = model
+        self.response_id = response_id
+        self.status = status
+        self.refusal = refusal
+        self.incomplete_reason = incomplete_reason
+        details = f"model={model}, response_id={response_id}, status={status}"
+        if incomplete_reason:
+            details += f", incomplete_reason={incomplete_reason}"
+        reason = refusal or "no parsed output returned"
+        super().__init__(f"Model refused to answer: {reason} ({details})")

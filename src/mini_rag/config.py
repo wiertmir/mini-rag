@@ -251,3 +251,10 @@ def load_config[C: Config](
         return config_cls(**overrides)
     except ValidationError as exc:
         parser.error(str(exc))
+
+
+class AskConfig(Config):
+    model_config = SettingsConfigDict(toml_table_header=("ask",))
+
+    answer_model: str = Field(default="gpt-5.4-mini", description="Model that generates the answer")
+    top_k: int = Field(default=5, ge=1, description="How many fragments go into the context")

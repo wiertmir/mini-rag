@@ -2,8 +2,8 @@
 
   > [!NOTE]
   > `ingest`, `embed`, `retrieve`, and `display` are implemented.
-  > Answer generation (`ask`) is the next learning stage; its target output
-  > contract and Pydantic models are defined below; the command is not implemented yet.
+  > Structured answer generation is available as an async Python component.
+  > The `ask` command and citation-resolution pipeline are not implemented yet.
 
   ### 1. Set up the environment
 
@@ -256,6 +256,54 @@
   The `ask` command will return a JSON object containing the generated answer,
   its citations, and an indication of whether the retrieved documents contained
   sufficient evidence.
+
+## Structured answer generation (Python component)
+
+`OpenAIAnswerGenerator` in `mini_rag.llm` implements the `AnswerGenerator`
+protocol. Its async `generate_async(question, context)` method takes the
+`(context_text, ref_map)` tuple returned by `build_context` and returns an
+`LlmAnswer`, not the final `Answer`. The generator sends the context text and
+question as a user message, `SYSTEM_PROMPT` as a system message, and
+`LlmAnswer` as the Structured Outputs schema. It uses an injected
+`AsyncOpenAI` client and model name; the caller owns the client's lifetime.
+
+`AskConfig` reads `[ask]` in `config.toml`: `answer_model` currently defaults
+to `gpt-5.4-mini`, `top_k` to `5` (at least `1`), and `index_dir` to `index`.
+The index manifest selects the matching chunk file; a separate chunk-path
+setting is not needed. Configuration precedence
+is the same as for other commands. The notebook is an exploratory example;
+the complete `ask` CLI and reference resolution remain planned.
+
+Export `OPENAI_API_KEY` in the launching shell before constructing the SDK
+client. A key stored only in `.env` is not automatically exported by
+Pydantic settings. Never commit credentials.
+
+A parsed answer with `insufficient_evidence=true` is a normal application
+refusal. Missing parsed output raises `MissingParsedOutputError`; its attributes include
+the response ID, status, safety refusal text (if present), and incomplete
+reason (if present). Error messages distinguish safety refusals, incomplete
+responses and otherwise missing parsed output; inspect the status/reason
+for programmatic handling.
+Transport/API errors propagate to the caller. INFO logs include model,
+latency and token usage, not the full question or context.
+
+### Generator checks
+
+Normal `python -m pytest -q` deselects the paid tests marked `live`. CI also
+explicitly excludes `live`, even when supplying its own marker expression.
+The opt-in checks load the existing index once and select a fixed source
+chunk by ID and text SHA-256; they do not re-embed documents or rerun
+retrieval. From the repository root with the existing index and exported key:
+
+```bash
+python -m pytest -q -m live tests/test_llm_live.py
+```
+
+This makes two paid generation requests: a supported question and Q29
+(Apple earnings, unsupported by the fixed climate context). Assertions check
+structure, refusal and reference membership, not exact answer wording. The
+pinned source hash fails explicitly if its text changes. Unit tests in
+`tests/test_llm.py` use fake clients and make no API requests.
 
 ## Answer contract
 

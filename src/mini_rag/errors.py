@@ -46,3 +46,31 @@ class StaleIndexError(ValueError):
 
 class DocumentNotFoundError(ValueError):
     """The chunks file has no chunks for the requested document"""
+
+
+class MissingParsedOutputError(Exception):
+    """Raised when generation returns no parsed answer, including refusal or incomplete output."""
+
+    def __init__(
+        self,
+        model: str,
+        response_id: str,
+        status: str | None,
+        refusal: str | None = None,
+        incomplete_reason: str | None = None,
+    ) -> None:
+        self.model = model
+        self.response_id = response_id
+        self.status = status
+        self.refusal = refusal
+        self.incomplete_reason = incomplete_reason
+        details = f"model={model}, response_id={response_id}, status={status}"
+        if incomplete_reason:
+            details += f", incomplete_reason={incomplete_reason}"
+        if refusal:
+            reason = f"Safety refusal: {refusal}"
+        elif status == "incomplete" or incomplete_reason:
+            reason = "Generation incomplete"
+        else:
+            reason = "No parsed output returned"
+        super().__init__(f"{reason} ({details})")

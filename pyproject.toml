@@ -27,8 +27,10 @@ dev = ["mypy", "pytest", "pytest-asyncio", "pytest-cov", "ruff", "types-aiofiles
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = ["-m", "not live"]
 markers = [
     "acceptance: black-box checks for a completed school task",
+    "live: tests that make live external requests",
 ]
 
 [tool.ruff]

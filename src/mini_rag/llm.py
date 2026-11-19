@@ -1,14 +1,56 @@
+from pathlib import Path
 from time import perf_counter
 from typing import Protocol, runtime_checkable
 
 import rich_struct.log
 from openai import AsyncOpenAI
 
-from mini_rag.errors import MissingParsedOutputError
-from mini_rag.models import Chunk, LlmAnswer
+from mini_rag.config import AskConfig, RetrieveConfig
+from mini_rag.errors import MissingParsedOutputError, NotInitializedError
+from mini_rag.models import Chunk, LlmAnswer, SearchResult
 from mini_rag.prompts import SYSTEM_PROMPT
+from mini_rag.retrieve import retrieve_from_index_async
+from mini_rag.storage import load_index_async
 
 logger = rich_struct.log.get_logger()
+
+
+@runtime_checkable
+class Retriever(Protocol):
+    """Retrieves chunks closest to the asked question"""
+
+    async def retrieve_async(
+        self, question: str, top_k: int | None = None
+    ) -> list[SearchResult]: ...
+
+
+class OpenAIRetriever:
+    def __init__(self, config: AskConfig, client: AsyncOpenAI):
+        self._config = config
+        self._client = client
+        self._index_loaded = False
+
+    async def load_index(self, chunks_path: Path | None = None):
+        logger.info("Loading index data from {}", self._config.index_dir)
+        self._index, self._chunks, self._manifest = await load_index_async(
+            self._config.index_dir, chunks_path
+        )
+        self._index_loaded = True
+
+    async def retrieve_async(self, question: str, top_k: int | None = None) -> list[SearchResult]:
+        if not self._index_loaded:
+            raise NotInitializedError("Retriever must load its index data before it can be used")
+
+        retrieve_config = RetrieveConfig(
+            question=question, top_k=top_k or self._config.top_k, index_dir=self._config.index_dir
+        )
+
+        results = await retrieve_from_index_async(
+            retrieve_config, self._client, self._index, self._manifest, self._chunks
+        )
+        if self._config.min_score is None:
+            return results
+        return [result for result in results if result.score >= self._config.min_score]
 
 
 @runtime_checkable

@@ -126,7 +126,7 @@ def test_ask_config_rejects_invalid_top_k(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValidationError):
-        AskConfig(top_k=top_k)
+        AskConfig(question="What's capital of Switzerland", top_k=top_k)
 
 
 def test_ask_config_precedence(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,24 +135,34 @@ def test_ask_config_precedence(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("ANSWER_MODEL", raising=False)
     monkeypatch.delenv("TOP_K", raising=False)
     (tmp_path / "config.toml").write_text('[ask]\nanswer_model="toml-model"\ntop_k=3\n')
-    assert AskConfig().answer_model == "toml-model"
+    assert AskConfig(question="What's capital of Switzerland").answer_model == "toml-model"
     (tmp_path / ".env").write_text("ANSWER_MODEL=dotenv-model\n")
-    assert AskConfig().answer_model == "dotenv-model"
+    assert AskConfig(question="What's capital of Switzerland").answer_model == "dotenv-model"
     monkeypatch.setenv("ANSWER_MODEL", "env-model")
-    assert AskConfig().answer_model == "env-model"
-    assert AskConfig(answer_model="explicit-model").answer_model == "explicit-model"
-    assert AskConfig().top_k == 3
+    assert AskConfig(question="What's capital of Switzerland").answer_model == "env-model"
+    assert (
+        AskConfig(
+            question="What's capital of Switzerland", answer_model="explicit-model"
+        ).answer_model
+        == "explicit-model"
+    )
+    assert AskConfig(question="What's capital of Switzerland").top_k == 3
 
 
 def test_ask_index_dir_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MINI_RAG_CONFIG", raising=False)
     monkeypatch.delenv("INDEX_DIR", raising=False)
-    assert AskConfig().index_dir == Path("index") / DEFAULT_EMBEDDING_MODEL
+    assert (
+        AskConfig(question="What's capital of Switzerland").index_dir
+        == Path("index") / DEFAULT_EMBEDDING_MODEL
+    )
     (tmp_path / "config.toml").write_text('[ask]\nindex_dir="toml-index"\n')
-    assert AskConfig().index_dir == Path("toml-index")
+    assert AskConfig(question="What's capital of Switzerland").index_dir == Path("toml-index")
     (tmp_path / ".env").write_text("INDEX_DIR=dotenv-index\n")
-    assert AskConfig().index_dir == Path("dotenv-index")
+    assert AskConfig(question="What's capital of Switzerland").index_dir == Path("dotenv-index")
     monkeypatch.setenv("INDEX_DIR", "env-index")
-    assert AskConfig().index_dir == Path("env-index")
-    assert AskConfig(index_dir=Path("explicit-index")).index_dir == Path("explicit-index")
+    assert AskConfig(question="What's capital of Switzerland").index_dir == Path("env-index")
+    assert AskConfig(
+        question="What's capital of Switzerland", index_dir=Path("explicit-index")
+    ).index_dir == Path("explicit-index")

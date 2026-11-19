@@ -74,3 +74,7 @@ class MissingParsedOutputError(Exception):
         else:
             reason = "No parsed output returned"
         super().__init__(f"{reason} ({details})")
+
+
+class NotInitializedError(Exception):
+    """Raised when system element is not initialized"""

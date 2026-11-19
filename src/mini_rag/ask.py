@@ -32,19 +32,22 @@ def resolve_citations(llm_answer: LlmAnswer, ref_map: dict[int, Chunk]) -> Resol
     mismatched_citations: list[int] = []
     citations: list[Citation] = []
     ref_num_list = list(llm_answer.cited_refs)
+    processed_citations: set[int] = set()
     for llm_txt_ref in re.findall(r"\[(\d+)\]", llm_answer.answer):
         ref_num = int(llm_txt_ref)
 
         if ref_num in ref_map:
-            chunk = ref_map[ref_num]
-            citation = Citation(
-                ref=ref_num,
-                chunk_id=chunk.chunk_id,
-                document_id=chunk.document_id,
-                page=chunk.page,
-                page_end=chunk.page_end,
-            )
-            citations.append(citation)
+            if ref_num not in processed_citations:
+                chunk = ref_map[ref_num]
+                citation = Citation(
+                    ref=ref_num,
+                    chunk_id=chunk.chunk_id,
+                    document_id=chunk.document_id,
+                    page=chunk.page,
+                    page_end=chunk.page_end,
+                )
+                citations.append(citation)
+                processed_citations.add(ref_num)
 
             if ref_num in ref_num_list:
                 ref_num_list.remove(ref_num)
@@ -52,6 +55,11 @@ def resolve_citations(llm_answer: LlmAnswer, ref_map: dict[int, Chunk]) -> Resol
                 mismatched_citations.append(ref_num)
         else:
             invalid_citations.append(ref_num)
+
+    if ref_num_list:
+        for ref_num in ref_num_list:
+            if ref_num not in invalid_citations and ref_num not in ref_map:
+                invalid_citations.append(ref_num)
 
     if invalid_citations:
         raise InvalidCitationError(invalid_citations)

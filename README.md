@@ -499,11 +499,17 @@ multiple questions; query embeddings use the loaded manifest's model. The CLI
 owns the SDK client's lifetime. Invalid citation errors propagate from the Python
 pipeline; the CLI prints an error on stderr and exits with status 1.
 
-**Known review defect:** `Answer.retrieved_chunk_ids` currently contains only cited
-chunks, not every retrieved chunk in ranking order. It is also empty for a model
-refusal even when retrieval returned evidence. Regression tests in `test_ask.py`
-require preserving the full retrieved list for baseline evaluation (#19).
+`Answer.retrieved_chunk_ids` preserves every retained retrieval result in ranking
+order, including uncited chunks and evidence seen by a model that refuses.
+Empty retrieval alone produces an empty list without invoking generation.
 
-The CLI currently renders Rich output. The original issue #18 required JSON-only
-stdout; that interface decision is awaiting confirmation and must be aligned
-before treating the original JSON-pipeline Done-when commands as satisfied.
+The CLI renders Rich output by default. Add `--json-output` for raw `Answer` JSON
+on stdout without a Rich wrapper, suitable for pipes and baseline tooling:
+
+```bash
+python -m mini_rag.ask "What is climate mitigation?" --json-output \
+  | python -c 'import sys; from mini_rag.models import Answer; a = Answer.model_validate_json(sys.stdin.read()); print(a.insufficient_evidence, len(a.citations))'
+```
+
+The implicit boolean flag also follows normal configuration precedence via
+`JSON_OUTPUT` or `json_output` in `[ask]`.

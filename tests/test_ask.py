@@ -388,3 +388,45 @@ def test_cli_invalid_citation_is_nonzero_stderr_without_traceback(
     assert captured.out == ""
     assert "7" in captured.err and "9" in captured.err
     assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("refusal", [False, True])
+def test_cli_json_output_is_parseable_answer_without_rich_wrapper(
+    cli_fakes: tuple[AsyncMock, AsyncMock],
+    ref_map: dict[int, Chunk],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    refusal: bool,
+) -> None:
+    from unittest.mock import Mock
+
+    import mini_rag.ask as ask_module
+    from mini_rag.models import Answer, Citation
+
+    monkeypatch.delenv("JSON_OUTPUT", raising=False)
+    _, runner = cli_fakes
+    source = ref_map[1]
+    expected = Answer(
+        answer="No evidence" if refusal else "Evidence [1].",
+        citations=[]
+        if refusal
+        else [
+            Citation(
+                ref=1,
+                chunk_id=source.chunk_id,
+                document_id=source.document_id,
+                page=source.page,
+                page_end=source.page_end,
+            )
+        ],
+        insufficient_evidence=refusal,
+        retrieved_chunk_ids=[source.chunk_id, ref_map[2].chunk_id],
+    )
+    runner.return_value = expected
+    printer = Mock(side_effect=AssertionError("JSON mode must not render Rich"))
+    monkeypatch.setattr(ask_module, "print_answer", printer)
+    ask_module.main(["Question?", "--json-output"])
+    captured = capsys.readouterr()
+    assert Answer.model_validate_json(captured.out) == expected
+    assert captured.err == ""
+    printer.assert_not_called()

@@ -1,0 +1,11 @@
+{
+  "model": "qwen3-embedding:4b",
+  "top_k": 5,
+  "chunks_sha256": "6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414",
+  "answerable": 28,
+  "hits": 26,
+  "missed_ids": [
+    "Q01",
+    "Q21"
+  ]
+}

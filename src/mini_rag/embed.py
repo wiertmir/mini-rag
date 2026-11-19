@@ -128,7 +128,7 @@ class EmbeddingStatus(StrEnum):
     REBUILT = "rebuilt"
 
 
-async def run_embed(
+async def run_embed_async(
     config: EmbedConfig, client: AsyncOpenAI
 ) -> tuple[EmbeddingStatus, EmbeddingManifest]:
     chunks_sha = calculate_file_sha(config.chunks)
@@ -213,7 +213,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         async with AsyncOpenAI(
             max_retries=config.max_retries, timeout=config.request_timeout
         ) as client:
-            await run_embed(config, client)
+            await run_embed_async(config, client)
 
     asyncio.run(run())
 

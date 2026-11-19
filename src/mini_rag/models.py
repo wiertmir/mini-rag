@@ -170,6 +170,7 @@ class Manifest(BaseModel):
     url: str = Field(description="Url of the source")
     year: str = Field(description="Publish year")
     collection: str = Field(description="The bigger set document belongs to. Usefull for filtering")
+    verified: str | None = Field(default=None, description="Verification notes")
 
 
 class LlmAnswer(BaseModel):

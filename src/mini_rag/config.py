@@ -14,7 +14,7 @@ import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Self, cast
+from typing import Any, ClassVar, Final, Self, cast
 
 from pydantic import Field, PrivateAttr, ValidationError, create_model, model_validator
 from pydantic_settings import (
@@ -31,7 +31,8 @@ from rich_argparse import RichHelpFormatter
 
 from mini_rag.pages import PageRange, parse_page_ranges
 
-CONFIG_FILE_ENV_VAR = "MINI_RAG_CONFIG"
+CONFIG_FILE_ENV_VAR: Final[str] = "MINI_RAG_CONFIG"
+DEFAULT_EMBEDDING_MODEL: Final[str] = "text-embedding-3-small"
 
 
 class HelpFormatter(RichHelpFormatter):
@@ -114,10 +115,6 @@ class IngestConfig(Config):
         description="regular expression for box titles; boxes move to the end of their section",
     )
 
-    tokenizer_model: str = Field(
-        default="text-embedding-3-small", description="model used to tokenize text"
-    )
-
     @model_validator(mode="after")
     def _check_patterns(self) -> Self:
         for pattern in [*self.skip_patterns, *([self.box_pattern] if self.box_pattern else [])]:
@@ -141,9 +138,10 @@ class EmbedConfig(Config):
 
     chunks: Path = Field(description="input JSONL file with chunks")
     output_dir: Path = Field(
-        default=Path("index"), description="directory for the index and manifest"
+        default=Path("index") / DEFAULT_EMBEDDING_MODEL,
+        description="directory for the index and manifest",
     )
-    embedding_model: str = Field(default="text-embedding-3-small", description="embedding model")
+    embedding_model: str = Field(default=DEFAULT_EMBEDDING_MODEL, description="embedding model")
     batch_size: int = Field(default=256, description="number of texts per API request")
     max_retries: int = Field(
         default=5,
@@ -166,11 +164,24 @@ class RetrieveConfig(Config):
     question: CliPositionalArg[str] = Field(description="user question")
     top_k: int = Field(default=5, ge=1, description="How many most similar chunks to return")
     index_dir: Path = Field(
-        default=Path("index"), description="directory for the index and manifest"
+        default=Path("index") / DEFAULT_EMBEDDING_MODEL,
+        description="directory for the index and manifest",
     )
     chunks: Path | None = Field(
         default=None,
         description="Use that chunks file, instead of defined by index manifest",
+    )
+
+
+class AskConfig(Config):
+    model_config = SettingsConfigDict(toml_table_header=("ask",))
+
+    answer_model: str = Field(default="gpt-5.4-mini", description="Model that generates the answer")
+    top_k: int = Field(default=5, ge=1, description="How many fragments go into the context")
+
+    index_dir: Path = Field(
+        default=Path("index") / DEFAULT_EMBEDDING_MODEL,
+        description="directory for the index and manifest",
     )
 
 
@@ -179,7 +190,8 @@ class DisplayConfig(Config):
 
     document_id: str = Field(min_length=1, description="ID of the document whose chunks to show")
     index_dir: Path = Field(
-        default=Path("index"), description="directory for the index and manifest"
+        default=Path("index") / DEFAULT_EMBEDDING_MODEL,
+        description="directory for the index and manifest",
     )
     chunks: Path | None = Field(
         default=None,
@@ -251,14 +263,3 @@ def load_config[C: Config](
         return config_cls(**overrides)
     except ValidationError as exc:
         parser.error(str(exc))
-
-
-class AskConfig(Config):
-    model_config = SettingsConfigDict(toml_table_header=("ask",))
-
-    answer_model: str = Field(default="gpt-5.4-mini", description="Model that generates the answer")
-    top_k: int = Field(default=5, ge=1, description="How many fragments go into the context")
-
-    index_dir: Path = Field(
-        default=Path("index"), description="directory for the index and manifest"
-    )

@@ -4,7 +4,6 @@
 # Top-level keys are shared by all commands; a command's table overrides them.
 
 data_dir = "data"
-tokenizer_model = "text-embedding-3-small"
 log_folder = "logs"
 
 [ingest]
@@ -23,18 +22,18 @@ skip_patterns = [
 box_pattern = '^(Cross-Chapter )?Box [\w.]+ \|'
 
 [embed]
-output_dir = "index"
+output_dir = "index/text-embedding-3-small"
 embedding_model = "text-embedding-3-small"
 batch_size = 256
 
 [retrieve]
-index_dir = "index"
+index_dir = "index/text-embedding-3-small"
 top_k = 5
 
 [display]
 # index_dir defaults to "index"; chunks defaults to the manifest's chunks_path
 
 [ask]
-index_dir = "index"
+index_dir = "index/text-embedding-3-small"
 answer_model = "gpt-5.4-mini"
 top_k = 5

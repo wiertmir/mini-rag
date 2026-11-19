@@ -32,12 +32,18 @@ def resolve_citations(llm_answer: LlmAnswer, ref_map: dict[int, Chunk]) -> Resol
     mismatched_citations: list[int] = []
     citations: list[Citation] = []
     ref_num_list = list(llm_answer.cited_refs)
-    processed_citations: set[int] = set()
+    processed_ref_citations: set[int] = set()
+    processed_txt_citations: set[int] = set()
     for llm_txt_ref in re.findall(r"\[(\d+)\]", llm_answer.answer):
         ref_num = int(llm_txt_ref)
 
+        if ref_num in processed_txt_citations:
+            continue
+
+        processed_txt_citations.add(ref_num)
+
         if ref_num in ref_map:
-            if ref_num not in processed_citations:
+            if ref_num not in processed_ref_citations:
                 chunk = ref_map[ref_num]
                 citation = Citation(
                     ref=ref_num,
@@ -47,10 +53,11 @@ def resolve_citations(llm_answer: LlmAnswer, ref_map: dict[int, Chunk]) -> Resol
                     page_end=chunk.page_end,
                 )
                 citations.append(citation)
-                processed_citations.add(ref_num)
+                processed_ref_citations.add(ref_num)
 
             if ref_num in ref_num_list:
-                ref_num_list.remove(ref_num)
+                while ref_num in ref_num_list:
+                    ref_num_list.remove(ref_num)
             else:
                 mismatched_citations.append(ref_num)
         else:

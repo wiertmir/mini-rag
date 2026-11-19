@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from mini_rag.models import Chunk, Citation, LlmAnswer
 

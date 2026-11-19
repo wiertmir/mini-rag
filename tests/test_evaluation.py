@@ -183,7 +183,8 @@ async def run_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Pa
     monkeypatch.setattr(module, "AsyncOpenAI", lambda: client)
 
     output_dir = tmp_path / "results"
-    await module.eval_async(client, 1, questions_path, index_dir, output_dir)
+    returned = await module.eval_async(client, 1, questions_path, index_dir, output_dir)
+    assert returned == json.loads((output_dir / "retrieval_smoke_summary.json").read_text())
     return output_dir, client
 
 
@@ -233,3 +234,66 @@ def test_question_rejects_answerable_containing_none_sentinel(documents: list[st
     # "NONE" is not a document id; an answerable question must not mention it at all.
     with pytest.raises(ValidationError):
         Question.model_validate(question_dict(expected_documents=documents))
+
+
+async def test_smoke_cli_owns_client_and_passes_custom_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import AsyncMock
+
+    module = load_smoke_script()
+    client = FakeClient()
+    constructor_calls = []
+
+    def make_client() -> FakeClient:
+        constructor_calls.append(True)
+        return client
+
+    evaluator = AsyncMock(return_value={})
+    monkeypatch.setattr(module, "AsyncOpenAI", make_client)
+    monkeypatch.setattr(module, "eval_async", evaluator)
+    questions = tmp_path / "questions.jsonl"
+    index = tmp_path / "local-index"
+    output = tmp_path / "local-results"
+    await module.run_async(
+        [
+            "--questions",
+            str(questions),
+            "--index-dir",
+            str(index),
+            "--output-dir",
+            str(output),
+            "--top-k",
+            "3",
+        ]
+    )
+    assert constructor_calls == [True]
+    evaluator.assert_awaited_once_with(client, 3, questions, index, output)
+
+
+@pytest.mark.parametrize(
+    "model_dir",
+    [
+        "qwen3-embedding_4b",
+        "qwen3-embedding_8b",
+        "text-embedding-3-small",
+    ],
+)
+def test_committed_embedding_results_match_summary(model_dir: str) -> None:
+    from mini_rag.models import RetrievalSmokeRecord
+
+    directory = REPO_ROOT / "eval" / "results" / model_dir
+    records = [
+        RetrievalSmokeRecord.model_validate_json(line)
+        for line in (directory / "retrieval_smoke.jsonl").read_text().splitlines()
+    ]
+    summary = json.loads((directory / "retrieval_smoke_summary.json").read_text())
+    answerable, hits, missed = summarize_evaluation(records)
+    assert len(records) == 30
+    assert len({record.id for record in records}) == 30
+    assert (answerable, hits, missed) == (
+        summary["answerable"],
+        summary["hits"],
+        summary["missed_ids"],
+    )
+    assert all(len(record.top_k) == summary["top_k"] for record in records)

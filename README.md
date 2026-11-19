@@ -183,7 +183,7 @@
 
   Embedding settings use the `[embed]` TOML table. `chunks` is required and has
   no default; provide it with `--chunks`, `CHUNKS`, or the TOML table.
-  Defaults are `output_dir = "index"`,
+  Defaults are `output_dir = "index/text-embedding-3-small"`,
   `embedding_model = "text-embedding-3-small"`, and `batch_size = 256`.
 
   The SDK handles retries with exponential backoff: `max_retries=5` and
@@ -205,7 +205,7 @@
   ```bash
   python -m mini_rag.embed \
     --chunks index/chunks_600_90.jsonl \
-    --output-dir index
+    --output-dir index/text-embedding-3-small
   ```
 
   ### Search the documents
@@ -233,7 +233,7 @@
   ignored. Chunks that share no text, i.e. different sections, are separated
   by lines. Chunks are read from `--chunks`, or from the
   `chunks_path` in `<index_dir>/embedding_manifest.json` when omitted
-  (`--index-dir`, default `index`; TOML table `[display]`).
+  (`--index-dir`, default `index/text-embedding-3-small`; TOML table `[display]`).
 
   Limit the output to some pages with `--pages`, using 1-based inclusive
   ranges separated by commas. Open ranges are allowed: `5-` means page 5 to
@@ -427,3 +427,28 @@ After validating references against the numbered context, the system returns:
   "retrieved_chunk_ids": ["WGIII_CH01_p006_c001"]
 }
 ```
+
+
+### Local embedding experiments (Ollama)
+
+The `embed_qwen3-embedding_4b.ipynb` and `embed_qwen3-embedding_8b.ipynb`
+notebooks inject an `AsyncOpenAI` client pointing to `http://localhost:11434/v1`
+with the local placeholder key `ollama`. Pull the matching model in Ollama first.
+They share `index/chunks_600_90.jsonl` but write separate model indexes under
+`index/qwen3-embedding_4b` and `index/qwen3-embedding_8b`.
+The matching `eval_*.ipynb` notebooks write results under `eval/results/<model>`.
+The OpenAI notebooks still require your private OpenAI API key.
+
+`run_embed_async(config, client)` and `eval_async(client, top_k, questions_path,
+index_dir, output_dir)` use the caller's client; the caller owns its lifecycle.
+The latter returns the summary it writes to disk. CLI clients use the SDK's
+endpoint configuration; choosing a local index alone does not switch the endpoint.
+Use `OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama` when
+running embedding/retrieval/evaluation CLIs against Ollama, and select the local
+model/index/output paths explicitly. The CLI defaults still target OpenAI.
+
+The committed smoke results use the same chunk hash and 28 answerable questions:
+4B scores 26/28, 8B scores 28/28, and OpenAI scores 27/28 at document-level hit@5.
+This small smoke set does not establish general superiority or answer quality.
+Ingestion uses a fixed chunking tokenizer, independently of the embedding model;
+there is no configurable `tokenizer_model` field.

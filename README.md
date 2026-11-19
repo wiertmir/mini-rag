@@ -329,7 +329,7 @@ application handles that inconsistency rather than losing it inside SDK
 parsing. Refusal invariants belong on the final `Answer`.
 
 Context fragments are numbered `1..n` in retrieval order. The application maps
-these numbers to the retrieved `Chunk` objects and resolves each cited number
+inline marker numbers to the retrieved `Chunk` objects and resolves each cited number
 into a **`Citation`**. The model never supplies document IDs or page numbers.
 An unknown reference is an error, not a source to invent; repeated references
 produce one citation in a deterministic order (issue #17).
@@ -466,8 +466,17 @@ and `extra_references` holds structured refs left over after scanning the text.
 Refusals return no resolved citations. `InvalidCitationError` inherits from
 `ValueError` and exposes `invalid_refs`.
 
-**Review status:** the core contract is not yet satisfied. The current resolver
-scans inline markers instead of resolving unique `cited_refs`, so it can miss
-invalid structured refs, duplicate sources, or substitute sources on a mismatch.
-`tests/test_ask.py` records these failures as regressions to fix before #18/#19.
-Text-marker diagnostics must remain separate from authoritative citation mapping.
+**Policy decision (2026-11-19):** inline `[n]` markers in `answer` determine
+which sources are resolved. `cited_refs` is a consistency cross-check, not a
+second source list to display. A marker absent from `cited_refs` is still
+resolved and reported in `mismatched_citations`; a structured ref absent from
+text is reported in `extra_references`, not added to the citations. Unknown
+numbers in either input still raise `InvalidCitationError`. Both diagnostics
+compare membership, not how many times a source was mentioned. Refusals ignore
+citation resolution and flag nonempty structured refs as above.
+
+**Review status:** invalid structured refs now raise and resolved citations are
+unique. Two regression cases still fail because repeated references produce
+false mismatch/extra diagnostics. These must be fixed before #18/#19. An answer
+with no inline markers has no resolved citations; the final `Answer` validator
+will reject that result when `insufficient_evidence=false`.

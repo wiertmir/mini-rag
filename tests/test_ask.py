@@ -101,18 +101,20 @@ def test_duplicate_structured_refs_do_not_create_false_extra_refs(
     assert result.extra_references == []
 
 
-def test_warning_only_marker_check_keeps_structured_refs_authoritative(
+def test_inline_markers_are_authoritative_and_structured_refs_are_diagnostics(
     ref_map: dict[int, Chunk],
 ) -> None:
     result = resolve_citations(answer("Claim [1].", [2]), ref_map)
-    assert [c.ref for c in result.resolved_citations] == [2]
+    assert [c.ref for c in result.resolved_citations] == [1]
     assert result.mismatched_citations == [1]
     assert result.extra_references == [2]
 
 
-def test_valid_structured_ref_without_marker_is_not_dropped(ref_map: dict[int, Chunk]) -> None:
+def test_structured_ref_without_marker_is_reported_but_not_resolved(
+    ref_map: dict[int, Chunk],
+) -> None:
     result = resolve_citations(answer("Claim without marker.", [3]), ref_map)
-    assert [c.ref for c in result.resolved_citations] == [3]
+    assert result.resolved_citations == []
     assert result.extra_references == [3]
 
 
@@ -125,3 +127,12 @@ def test_inputs_unchanged_and_results_deterministic(ref_map: dict[int, Chunk]) -
     assert sorted(c.ref for c in first.resolved_citations) == [1, 3]
     assert llm_answer.model_dump() == before_answer
     assert {ref: chunk.model_dump() for ref, chunk in ref_map.items()} == before_map
+
+
+def test_inline_source_is_resolved_even_if_structured_refs_are_empty(
+    ref_map: dict[int, Chunk],
+) -> None:
+    result = resolve_citations(answer("Evidence [2].", []), ref_map)
+    assert [c.ref for c in result.resolved_citations] == [2]
+    assert result.mismatched_citations == [2]
+    assert result.extra_references == []

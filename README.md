@@ -1,10 +1,9 @@
 ## Running the project
 
   > [!NOTE]
-  > `ingest`, `embed`, `retrieve`, and `display` are implemented.
+  > `ingest`, `embed`, `retrieve`, `display`, and `ask` are implemented.
   > Structured answer generation is available as an async Python component.
   > Citation resolution is available as a Python component under review (issue #17).
-  > The `ask` command is not implemented yet.
 
   ### 1. Set up the environment
 
@@ -107,8 +106,7 @@
 
   ## Pipeline usage
 
-  Ingestion, embeddings, retrieval and chunk display are available. The `ask`
-  example is explicitly marked as planned.
+  Ingestion, embeddings, retrieval, chunk display and answer generation are available.
 
   ### Process the documents
 
@@ -246,7 +244,7 @@
   python -m mini_rag.display --document-id WGIII_CH03 --pages="3-7,9,14-"
   ```
 
-  ### Ask a question (planned — not implemented yet)
+  ### Ask a question
 
   ```bash
   python -m mini_rag.ask \
@@ -254,9 +252,20 @@
     --top-k 5
   ```
 
-  The `ask` command will return a JSON object containing the generated answer,
-  its citations, and an indication of whether the retrieved documents contained
-  sufficient evidence.
+  The `ask` command displays the answer in a dimmed blue-gray Rich panel, with dimmed
+  blue citations below the answer inside the same panel (only `ref`, `document_id`,
+  `page`, and `page_end`).
+  Answers with insufficient evidence use a dimmed orange-gray border and no citations.
+  In Python or notebooks, use `mini_rag.ask.print_answer(answer)` for the same display.
+
+  Add `--min-score 0.5` to keep only retrieved chunks whose cosine similarity is
+  at least `0.5`. The optional threshold defaults to `None` (no filtering), accepts
+  values in `[-1, 1]`, and can also be set with `MIN_SCORE` or `min_score` in `[ask]`.
+  Filtering applies after top-k retrieval; it does not fetch replacement chunks.
+  If retrieval returns no chunks, `ask_async` returns a local refusal without calling
+  the answer model: `insufficient_evidence=true`, `citations=[]`, and
+  `retrieved_chunk_ids=[]`. Query embedding is still needed for score-based retrieval;
+  an empty index remains an error.
 
 ## Structured answer generation (Python component)
 
@@ -269,11 +278,12 @@ question as a user message, `SYSTEM_PROMPT` as a system message, and
 `AsyncOpenAI` client and model name; the caller owns the client's lifetime.
 
 `AskConfig` reads `[ask]` in `config.toml`: `answer_model` currently defaults
-to `gpt-5.4-mini`, `top_k` to `5` (at least `1`), and `index_dir` to `index`.
+to `gpt-5.4-mini`, `top_k` to `5` (at least `1`), `min_score` to `None`,
+and `index_dir` to `index/text-embedding-3-small`.
 The index manifest selects the matching chunk file; a separate chunk-path
 setting is not needed. Configuration precedence
-is the same as for other commands. The notebook is an exploratory example;
-the complete `ask` CLI and reference resolution remain planned.
+is the same as for other commands. The notebook is an exploratory example
+using the same answer pipeline and Rich printer as the `ask` CLI.
 
 Export `OPENAI_API_KEY` in the launching shell before constructing the SDK
 client. A key stored only in `.env` is not automatically exported by
@@ -309,8 +319,8 @@ pinned source hash fails explicitly if its text changes. Unit tests in
 ## Answer contract
 
 **Answer contract for learning issue #14.** `LlmAnswer`, `Citation`, and
-`Answer` are defined in `src/mini_rag/models.py`. The `ask` command and the
-reference-resolution pipeline remain planned. Szpan maintains this
+`Answer` are defined in `src/mini_rag/models.py`. The `ask` command uses the
+reference-resolution pipeline. Szpan maintains this
 documentation; the constraints below specify the required model contract.
 
 ### Model output versus system output

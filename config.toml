@@ -37,3 +37,5 @@ top_k = 5
 index_dir = "index/text-embedding-3-small"
 answer_model = "gpt-5.4-mini"
 top_k = 5
+# Optional inclusive cosine similarity threshold; omitted means no filtering.
+# min_score = 0.5

@@ -8,6 +8,11 @@ from dataclasses import dataclass
 
 import rich_struct.log
 from openai import AsyncOpenAI, OpenAIError
+from rich.console import Console, Group
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from mini_rag.config import AskConfig, HelpFormatter, load_config
 from mini_rag.helpers import ErrorHandler
@@ -93,6 +98,15 @@ async def ask_async(
 ) -> Answer:
     logger.info("Retrieving closest semanticly chunks for user question")
     search_results = await retriever.retrieve_async(question, top_k)
+    if not search_results:
+        logger.info("No chunks retrieved; refusing without calling the answer model")
+        return Answer(
+            answer="I don't have enough evidence in the retrieved documents to answer this question.",
+            citations=[],
+            insufficient_evidence=True,
+            retrieved_chunk_ids=[],
+        )
+
     logger.info("Building question context")
     question_context = build_context(search_results)
     logger.info("Getting answer for user question from LLM")
@@ -119,9 +133,32 @@ async def ask_async(
     )
 
 
+def print_answer(answer: Answer, console: Console | None = None) -> None:
+    """Render an answer and, when supported, its source metadata."""
+    console = console or Console()
+    border_style = "dim #92745b" if answer.insufficient_evidence else "dim #64748b"
+    if answer.insufficient_evidence:
+        console.print(Panel(Markdown(answer.answer), border_style=border_style))
+        return
+
+    citations = Table(box=None, header_style="dim #87cefa", row_styles=["dim #87cefa"])
+    for column in ("ref", "document_id", "page", "page_end"):
+        citations.add_column(column)
+    for citation in answer.citations:
+        citations.add_row(
+            str(citation.ref),
+            Text(citation.document_id),
+            str(citation.page),
+            str(citation.page_end),
+        )
+    console.print(
+        Panel(Group(Markdown(answer.answer), Text(), citations), border_style=border_style)
+    )
+
+
 async def _run_async(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        prog="python -m mini_rag.retrieve",
+        prog="python -m mini_rag.ask",
         description=__doc__,
         formatter_class=HelpFormatter,
         allow_abbrev=False,
@@ -138,7 +175,7 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
 
         answer = await ask_async(config.question, retriever, generator, config.top_k)
 
-    print(answer.answer)
+    print_answer(answer)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

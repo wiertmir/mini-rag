@@ -179,6 +179,12 @@ class AskConfig(Config):
     question: CliPositionalArg[str] = Field(description="user question")
     answer_model: str = Field(default="gpt-5.4-mini", description="Model that generates the answer")
     top_k: int = Field(default=5, ge=1, description="How many fragments go into the context")
+    min_score: float | None = Field(
+        default=None,
+        ge=-1,
+        le=1,
+        description="Minimum cosine similarity to keep a retrieved chunk (inclusive)",
+    )
 
     index_dir: Path = Field(
         default=Path("index") / DEFAULT_EMBEDDING_MODEL,

@@ -45,9 +45,12 @@ class OpenAIRetriever:
             question=question, top_k=top_k or self._config.top_k, index_dir=self._config.index_dir
         )
 
-        return await retrieve_from_index_async(
+        results = await retrieve_from_index_async(
             retrieve_config, self._client, self._index, self._manifest, self._chunks
         )
+        if self._config.min_score is None:
+            return results
+        return [result for result in results if result.score >= self._config.min_score]
 
 
 @runtime_checkable

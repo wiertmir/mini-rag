@@ -1,11 +1,15 @@
 """Offline contract tests for issue #17; the richer result keeps diagnostics visible."""
 
 from pathlib import Path
+from unittest.mock import AsyncMock
 
+import numpy as np
 import pytest
 
-from mini_rag.ask import InvalidCitationError, resolve_citations
-from mini_rag.models import Chunk, LlmAnswer
+from mini_rag.ask import InvalidCitationError, ask_async, resolve_citations
+from mini_rag.config import AskConfig, load_config
+from mini_rag.llm import AnswerGenerator, OpenAIRetriever, Retriever
+from mini_rag.models import Chunk, EmbeddingManifest, LlmAnswer, SearchResult
 
 
 @pytest.fixture
@@ -136,3 +140,81 @@ def test_inline_source_is_resolved_even_if_structured_refs_are_empty(
     assert [c.ref for c in result.resolved_citations] == [2]
     assert result.mismatched_citations == [2]
     assert result.extra_references == []
+
+
+async def test_empty_retrieval_refuses_without_calling_generator() -> None:
+    retriever = AsyncMock(spec=Retriever)
+    retriever.retrieve_async.return_value = []
+    generator = AsyncMock(spec=AnswerGenerator)
+    generator.generate_async.side_effect = AssertionError("Must not call the model")
+
+    result = await ask_async("Unsupported question?", retriever, generator, top_k=3)
+
+    assert result.insufficient_evidence is True
+    assert result.answer.strip()
+    assert result.citations == []
+    assert result.retrieved_chunk_ids == []
+    retriever.retrieve_async.assert_awaited_once_with("Unsupported question?", 3)
+    generator.generate_async.assert_not_called()
+
+
+@pytest.mark.parametrize(("min_score", "expected_refs"), [(None, [1, 2]), (0.5, [1]), (0.9, [])])
+async def test_score_filter_and_no_evidence_refusal(
+    ref_map: dict[int, Chunk],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    min_score: float | None,
+    expected_refs: list[int],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MINI_RAG_CONFIG", raising=False)
+    results = [
+        SearchResult(rank=ref, score=score, chunk=ref_map[ref])
+        for ref, score in [(1, 0.5), (2, 0.2)]
+    ]
+    manifest = EmbeddingManifest(
+        model="test",
+        dimension=2,
+        records=2,
+        chunks_path=tmp_path / "chunks.jsonl",
+        chunks_sha256="0" * 64,
+    )
+    monkeypatch.setattr(
+        "mini_rag.llm.load_index_async",
+        AsyncMock(return_value=(np.eye(2, dtype=np.float32), list(ref_map.values())[:2], manifest)),
+    )
+    monkeypatch.setattr("mini_rag.llm.retrieve_from_index_async", AsyncMock(return_value=results))
+    retriever = OpenAIRetriever(AskConfig(question="Question?", min_score=min_score), AsyncMock())
+    await retriever.load_index()
+    generator = AsyncMock(spec=AnswerGenerator)
+    if expected_refs:
+        generator.generate_async.return_value = answer(
+            " ".join(f"Evidence [{ref}]." for ref in expected_refs), expected_refs
+        )
+    else:
+        generator.generate_async.side_effect = AssertionError("Must not call the model")
+
+    result = await ask_async("Question?", retriever, generator)
+
+    assert result.insufficient_evidence is (not expected_refs)
+    assert [citation.ref for citation in result.citations] == expected_refs
+    if expected_refs:
+        generator.generate_async.assert_awaited_once()
+        context = generator.generate_async.call_args.args[1]
+        assert [chunk.chunk_id for chunk in context[1].values()] == [
+            ref_map[ref].chunk_id for ref in expected_refs
+        ]
+    else:
+        assert result.citations == result.retrieved_chunk_ids == []
+        generator.generate_async.assert_not_called()
+
+
+def test_min_score_cli_and_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MINI_RAG_CONFIG", raising=False)
+    monkeypatch.delenv("MIN_SCORE", raising=False)
+    assert load_config(AskConfig, ["Question?", "--min-score", "0.5"]).min_score == 0.5
+    for invalid in ("-1.1", "1.1", "nan", "inf"):
+        with pytest.raises(SystemExit) as caught:
+            load_config(AskConfig, ["Question?", f"--min-score={invalid}"])
+        assert caught.value.code == 2

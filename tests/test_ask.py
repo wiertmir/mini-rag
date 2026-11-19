@@ -218,3 +218,173 @@ def test_min_score_cli_and_validation(tmp_path: Path, monkeypatch: pytest.Monkey
         with pytest.raises(SystemExit) as caught:
             load_config(AskConfig, ["Question?", f"--min-score={invalid}"])
         assert caught.value.code == 2
+
+
+@pytest.mark.parametrize(("cited_ref", "refusal"), [(1, False), (3, False), (None, True)])
+async def test_ask_preserves_all_retrieved_ids_and_citation_metadata(
+    ref_map: dict[int, Chunk], cited_ref: int | None, refusal: bool
+) -> None:
+    results = [SearchResult(rank=i, score=0.9 / i, chunk=ref_map[i]) for i in (3, 1, 2)]
+    retriever = AsyncMock(spec=Retriever)
+    retriever.retrieve_async.return_value = results
+    generator = AsyncMock(spec=AnswerGenerator)
+    refs = [] if cited_ref is None else [cited_ref]
+    generator.generate_async.return_value = answer(
+        "No evidence" if refusal else f"Evidence [{cited_ref}].", refs, refusal=refusal
+    )
+    result = await ask_async("Question?", retriever, generator, top_k=3)
+    retriever.retrieve_async.assert_awaited_once_with("Question?", 3)
+    generator.generate_async.assert_awaited_once()
+    context = generator.generate_async.call_args.args[1]
+    assert list(context[1].values()) == [item.chunk for item in results]
+    if not refusal:
+        assert cited_ref is not None
+        source = context[1][cited_ref]
+        citation = result.citations[0]
+        assert (citation.chunk_id, citation.document_id, citation.page, citation.page_end) == (
+            source.chunk_id,
+            source.document_id,
+            source.page,
+            source.page_end,
+        )
+    else:
+        assert result.citations == []
+    assert result.retrieved_chunk_ids == [item.chunk.chunk_id for item in results]
+
+
+async def test_ask_invalid_citation_reaches_caller(ref_map: dict[int, Chunk]) -> None:
+    retriever = AsyncMock(spec=Retriever)
+    retriever.retrieve_async.return_value = [SearchResult(rank=1, score=0.9, chunk=ref_map[1])]
+    generator = AsyncMock(spec=AnswerGenerator)
+    generator.generate_async.return_value = answer("Invented [7]", [7])
+    with pytest.raises(InvalidCitationError) as caught:
+        await ask_async("Question?", retriever, generator)
+    assert caught.value.invalid_refs == [7]
+
+
+async def test_ask_generation_error_reaches_caller(ref_map: dict[int, Chunk]) -> None:
+    retriever = AsyncMock(spec=Retriever)
+    retriever.retrieve_async.return_value = [SearchResult(rank=1, score=0.9, chunk=ref_map[1])]
+    generator = AsyncMock(spec=AnswerGenerator)
+    failure = RuntimeError("generation failed")
+    generator.generate_async.side_effect = failure
+    with pytest.raises(RuntimeError) as caught:
+        await ask_async("Question?", retriever, generator)
+    assert caught.value is failure
+
+
+async def test_retriever_requires_explicit_initialization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mini_rag.errors import NotInitializedError
+
+    monkeypatch.chdir(tmp_path)
+    retriever = OpenAIRetriever(AskConfig(question="Question?"), AsyncMock())
+    with pytest.raises(NotInitializedError):
+        await retriever.retrieve_async("Question?")
+
+
+async def test_retriever_loads_once_and_uses_manifest_model_for_every_query(
+    ref_map: dict[int, Chunk], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from mini_rag import llm
+    from mini_rag.storage import calculate_file_sha, save_index
+
+    monkeypatch.chdir(tmp_path)
+    chunks = tmp_path / "chunks.jsonl"
+    chunks.write_text("".join(ref_map[i].model_dump_json() + "\n" for i in (1, 2)))
+    index = tmp_path / "index"
+    save_index(
+        index,
+        np.eye(2, dtype=np.float32),
+        EmbeddingManifest(
+            model="manifest-specific-model",
+            dimension=2,
+            records=2,
+            chunks_path=chunks,
+            chunks_sha256=calculate_file_sha(chunks),
+        ),
+    )
+    loader = AsyncMock(wraps=llm.load_index_async)
+    monkeypatch.setattr(llm, "load_index_async", loader)
+    client = AsyncMock()
+    client.embeddings.create.return_value = SimpleNamespace(
+        data=[SimpleNamespace(index=0, embedding=[1.0, 0.0])],
+        usage=SimpleNamespace(total_tokens=1),
+    )
+    retriever = OpenAIRetriever(AskConfig(question="unused", index_dir=index, top_k=2), client)
+    await retriever.load_index()
+    for question in ("first question", "second question"):
+        results = await retriever.retrieve_async(question, top_k=1)
+        assert len(results) == 1
+        assert results[0].chunk.chunk_id == ref_map[1].chunk_id
+    loader.assert_awaited_once()
+    assert client.embeddings.create.await_count == 2
+    assert [call.kwargs for call in client.embeddings.create.await_args_list] == [
+        {"model": "manifest-specific-model", "input": (question,)}
+        for question in ("first question", "second question")
+    ]
+
+
+@pytest.fixture
+def cli_fakes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[AsyncMock, AsyncMock]:
+    import mini_rag.ask as ask_module
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MINI_RAG_CONFIG", raising=False)
+    monkeypatch.delenv("TOP_K", raising=False)
+    monkeypatch.delenv("QUESTION", raising=False)
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    retriever = AsyncMock(spec=Retriever)
+    retriever.load_index = AsyncMock()
+    # CLI logging is process-global; keep it isolated from later tests.
+    monkeypatch.setattr(ask_module.rich_struct.log, "configure", lambda **kwargs: None)
+    monkeypatch.setattr(ask_module, "AsyncOpenAI", lambda: client)
+    monkeypatch.setattr(ask_module, "OpenAIRetriever", lambda config, client: retriever)
+    monkeypatch.setattr(ask_module, "OpenAIAnswerGenerator", lambda client, model: object())
+    runner = AsyncMock()
+    monkeypatch.setattr(ask_module, "ask_async", runner)
+    return retriever, runner
+
+
+def test_cli_loads_once_and_forwards_question_top_k(
+    cli_fakes: tuple[AsyncMock, AsyncMock], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import Mock
+
+    import mini_rag.ask as ask_module
+    from mini_rag.models import Answer
+
+    retriever, runner = cli_fakes
+    expected = Answer(
+        answer="No evidence", citations=[], insufficient_evidence=True, retrieved_chunk_ids=[]
+    )
+    runner.return_value = expected
+    printer = Mock()
+    monkeypatch.setattr(ask_module, "print_answer", printer)
+    ask_module.main(["Question?", "--top-k", "2"])
+    retriever.load_index.assert_awaited_once()
+    assert runner.await_args is not None
+    assert runner.await_args.args[0] == "Question?"
+    assert runner.await_args.args[1] is retriever
+    assert runner.await_args.args[3] == 2
+    printer.assert_called_once_with(expected)
+
+
+def test_cli_invalid_citation_is_nonzero_stderr_without_traceback(
+    cli_fakes: tuple[AsyncMock, AsyncMock], capsys: pytest.CaptureFixture[str]
+) -> None:
+    import mini_rag.ask as ask_module
+
+    _, runner = cli_fakes
+    runner.side_effect = InvalidCitationError([7, 9])
+    with pytest.raises(SystemExit) as caught:
+        ask_module.main(["Question?"])
+    captured = capsys.readouterr()
+    assert caught.value.code == 1
+    assert captured.out == ""
+    assert "7" in captured.err and "9" in captured.err
+    assert "Traceback" not in captured.err

@@ -490,3 +490,20 @@ one citation, and duplicate occurrences do not create false mismatch/extra
 warnings for matching refs. These behaviors are covered by `tests/test_ask.py`.
 An answer with no inline markers has no resolved citations; the final `Answer`
 validator rejects that result when `insufficient_evidence=false`.
+
+### Ask orchestration review status (issue #18)
+
+`ask_async(question, retriever, generator, top_k)` takes injected async components.
+Initialize `OpenAIRetriever` once with `await retriever.load_index()` before asking
+multiple questions; query embeddings use the loaded manifest's model. The CLI
+owns the SDK client's lifetime. Invalid citation errors propagate from the Python
+pipeline; the CLI prints an error on stderr and exits with status 1.
+
+**Known review defect:** `Answer.retrieved_chunk_ids` currently contains only cited
+chunks, not every retrieved chunk in ranking order. It is also empty for a model
+refusal even when retrieval returned evidence. Regression tests in `test_ask.py`
+require preserving the full retrieved list for baseline evaluation (#19).
+
+The CLI currently renders Rich output. The original issue #18 required JSON-only
+stdout; that interface decision is awaiting confirmation and must be aligned
+before treating the original JSON-pipeline Done-when commands as satisfied.

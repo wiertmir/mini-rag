@@ -475,8 +475,8 @@ numbers in either input still raise `InvalidCitationError`. Both diagnostics
 compare membership, not how many times a source was mentioned. Refusals ignore
 citation resolution and flag nonempty structured refs as above.
 
-**Review status:** invalid structured refs now raise and resolved citations are
-unique. Two regression cases still fail because repeated references produce
-false mismatch/extra diagnostics. These must be fixed before #18/#19. An answer
-with no inline markers has no resolved citations; the final `Answer` validator
-will reject that result when `insufficient_evidence=false`.
+**Review status:** invalid refs in either field raise, repeated markers produce
+one citation, and duplicate occurrences do not create false mismatch/extra
+warnings for matching refs. These behaviors are covered by `tests/test_ask.py`.
+An answer with no inline markers has no resolved citations; the final `Answer`
+validator rejects that result when `insufficient_evidence=false`.

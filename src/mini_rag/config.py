@@ -190,6 +190,10 @@ class AskConfig(Config):
         default=Path("index") / DEFAULT_EMBEDDING_MODEL,
         description="directory for the index and manifest",
     )
+    json_output: CliImplicitFlag[bool] = Field(
+        default=False,
+        description="If true program outputs raw json, otherwise it uses `rich` to make a pretty display",
+    )
 
 
 class DisplayConfig(Config):

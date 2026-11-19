@@ -127,9 +127,7 @@ async def ask_async(
         answer=llm_answer.answer,
         citations=resolved_citations.resolved_citations,
         insufficient_evidence=llm_answer.insufficient_evidence,
-        retrieved_chunk_ids=[
-            citation.chunk_id for citation in resolved_citations.resolved_citations
-        ],
+        retrieved_chunk_ids=[chunk.chunk_id for chunk in question_context[1].values()],
     )
 
 
@@ -175,7 +173,10 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
 
         answer = await ask_async(config.question, retriever, generator, config.top_k)
 
-    print_answer(answer)
+    if config.json_output:
+        print(answer.model_dump_json(indent=2))
+    else:
+        print_answer(answer)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

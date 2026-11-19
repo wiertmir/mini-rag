@@ -3,7 +3,8 @@
   > [!NOTE]
   > `ingest`, `embed`, `retrieve`, and `display` are implemented.
   > Structured answer generation is available as an async Python component.
-  > The `ask` command and citation-resolution pipeline are not implemented yet.
+  > Citation resolution is available as a Python component under review (issue #17).
+  > The `ask` command is not implemented yet.
 
   ### 1. Set up the environment
 
@@ -328,7 +329,7 @@ application handles that inconsistency rather than losing it inside SDK
 parsing. Refusal invariants belong on the final `Answer`.
 
 Context fragments are numbered `1..n` in retrieval order. The application maps
-these numbers to the retrieved `Chunk` objects and resolves each cited number
+inline marker numbers to the retrieved `Chunk` objects and resolves each cited number
 into a **`Citation`**. The model never supplies document IDs or page numbers.
 An unknown reference is an error, not a source to invent; repeated references
 produce one citation in a deterministic order (issue #17).
@@ -452,3 +453,30 @@ The committed smoke results use the same chunk hash and 28 answerable questions:
 This small smoke set does not establish general superiority or answer quality.
 Ingestion uses a fixed chunking tokenizer, independently of the embedding model;
 there is no configurable `tokenizer_model` field.
+
+
+### Citation resolution component (issue #17)
+
+`mini_rag.ask.resolve_citations(llm_answer, ref_map)` currently returns a
+`ResolvedCitations` diagnostic container, not a bare list. Its
+`resolved_citations` contains `Citation` objects copied from retrieved chunk
+metadata. `non_empty_citations_error` flags a refusal with structured refs;
+`mismatched_citations` reports inline markers not consumed from `cited_refs`,
+and `extra_references` holds structured refs left over after scanning the text.
+Refusals return no resolved citations. `InvalidCitationError` inherits from
+`ValueError` and exposes `invalid_refs`.
+
+**Policy decision (2026-11-19):** inline `[n]` markers in `answer` determine
+which sources are resolved. `cited_refs` is a consistency cross-check, not a
+second source list to display. A marker absent from `cited_refs` is still
+resolved and reported in `mismatched_citations`; a structured ref absent from
+text is reported in `extra_references`, not added to the citations. Unknown
+numbers in either input still raise `InvalidCitationError`. Both diagnostics
+compare membership, not how many times a source was mentioned. Refusals ignore
+citation resolution and flag nonempty structured refs as above.
+
+**Review status:** invalid refs in either field raise, repeated markers produce
+one citation, and duplicate occurrences do not create false mismatch/extra
+warnings for matching refs. These behaviors are covered by `tests/test_ask.py`.
+An answer with no inline markers has no resolved citations; the final `Answer`
+validator rejects that result when `insufficient_evidence=false`.

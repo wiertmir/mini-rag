@@ -106,7 +106,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     run_ingest(config)
 
 
-def run_ingest(config):
+def run_ingest(config: IngestConfig) -> None:
     errors: list[str] = []
     manifests = read_manifest_file(config.manifest)
 

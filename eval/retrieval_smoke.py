@@ -3,6 +3,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
+from typing import Any
 
 import aiofiles
 import rich_struct.log
@@ -10,6 +11,7 @@ from asyncstdlib import tee
 from asyncstdlib import zip as zip_async
 from openai import AsyncOpenAI, OpenAIError
 
+from mini_rag.config import DEFAULT_EMBEDDING_MODEL
 from mini_rag.embed import embed_texts_async
 from mini_rag.evaluation import is_hit, summarize_evaluation
 from mini_rag.helpers import ErrorHandler
@@ -42,18 +44,31 @@ async def run_async(argv: Iterable[str] | None = None):
         help="How many search results use to compare with exected answers",
     )
     parser.add_argument(
-        "--index-dir", type=str, default="index", help="Location of embeddings index and manifest"
+        "--index-dir",
+        type=str,
+        default=f"index/{DEFAULT_EMBEDDING_MODEL}",
+        help="Location of embeddings index and manifest",
     )
-    parser.add_argument("--output-dir", type=str, default="eval/results", help="Results directory")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=f"eval/results/{DEFAULT_EMBEDDING_MODEL}",
+        help="Results directory",
+    )
 
     args = parser.parse_args(argv)
 
     top_k = int(args.top_k)
 
-    await eval_async(top_k, Path(args.questions), Path(args.index_dir), Path(args.output_dir))
+    async with AsyncOpenAI() as client:
+        await eval_async(
+            client, top_k, Path(args.questions), Path(args.index_dir), Path(args.output_dir)
+        )
 
 
-async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_dir: Path):
+async def eval_async(
+    client: AsyncOpenAI, top_k: int, questions_path: Path, index_dir: Path, output_dir: Path
+) -> dict[str, Any]:
     index = await load_index_async(index_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -67,7 +82,6 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
 
     async with (
         tee(load_questions_async(questions_path)) as (questions, embedding_questions),
-        AsyncOpenAI() as client,
         aiofiles.open(smoke_jsonl_path, mode="w", encoding="utf-8") as smoke_file,
     ):
         q_vectors = embed_texts_async(
@@ -115,6 +129,8 @@ async def eval_async(top_k: int, questions_path: Path, index_dir: Path, output_d
         }
         summary_json = json.dumps(summary, indent=2)
         await summary_file.write(summary_json)
+
+    return summary
 
 
 def main(argv: Iterable[str] | None = None):

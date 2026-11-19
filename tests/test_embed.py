@@ -14,7 +14,7 @@ from mini_rag.embed import (
     embed_texts_async,
     normalize,
     normalize_async,
-    run_embed,
+    run_embed_async,
     save_index,
 )
 from mini_rag.errors import EmptyInputData
@@ -143,7 +143,8 @@ def test_save_index_removes_old_manifest_before_writing_embeddings(
     manifest_path = tmp_path / "embedding_manifest.json"
     manifest_path.write_text("old manifest", encoding="utf-8")
 
-    def fail_save(*args: object, **kwargs: object) -> None:
+    def fail_save(*_args: object, **_kwargs: object) -> None:
+        _ = _args, _kwargs
         assert not manifest_path.exists()
         raise OSError("Embedding write failed")
 
@@ -294,7 +295,7 @@ async def test_run_embed_writes_index_and_manifest(
     config = run_embed_config
     client = FakeClient()
 
-    _, returned_manifest = await run_embed(config, cast(AsyncOpenAI, client))
+    _, returned_manifest = await run_embed_async(config, cast(AsyncOpenAI, client))
 
     matrix = np.load(config.output_dir / "embeddings.npy", allow_pickle=False)
     manifest = EmbeddingManifest.model_validate_json(
@@ -329,7 +330,7 @@ async def test_run_embed_rejects_mismatched_embedding_count_before_saving(
     client = FewerVectorsClient()
 
     with pytest.raises(ValueError, match="Expected 3 embeddings for chunks, got 1"):
-        await run_embed(config, cast(AsyncOpenAI, client))
+        await run_embed_async(config, cast(AsyncOpenAI, client))
 
     assert not (config.output_dir / "embeddings.npy").exists()
     assert not (config.output_dir / "embedding_manifest.json").exists()
@@ -351,7 +352,7 @@ async def test_run_embed_propagates_second_batch_failure_without_output(
     client = FailingClient()
 
     with pytest.raises(RuntimeError, match="Second batch failed") as exc:
-        await run_embed(config, cast(AsyncOpenAI, client))
+        await run_embed_async(config, cast(AsyncOpenAI, client))
 
     assert exc.value is failure
     assert client.calls == [
@@ -366,7 +367,7 @@ async def test_run_embed_second_run_is_free(run_embed_config: EmbedConfig) -> No
     from mini_rag.embed import EmbeddingStatus
 
     client = FakeClient()
-    status, original = await run_embed(run_embed_config, cast(AsyncOpenAI, client))
+    status, original = await run_embed_async(run_embed_config, cast(AsyncOpenAI, client))
     assert status is EmbeddingStatus.REBUILT
     calls = list(client.calls)
     paths = [
@@ -374,7 +375,7 @@ async def test_run_embed_second_run_is_free(run_embed_config: EmbedConfig) -> No
     ]
     before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
 
-    status, manifest = await run_embed(run_embed_config, cast(AsyncOpenAI, client))
+    status, manifest = await run_embed_async(run_embed_config, cast(AsyncOpenAI, client))
 
     assert status is EmbeddingStatus.SKIPPED
     assert manifest == original
@@ -387,11 +388,11 @@ async def test_run_embed_changed_chunks_rebuilds(run_embed_config: EmbedConfig) 
 
     config = run_embed_config
     client = FakeClient()
-    await run_embed(config, cast(AsyncOpenAI, client))
+    await run_embed_async(config, cast(AsyncOpenAI, client))
     calls = len(client.calls)
     config.chunks.write_text(config.chunks.read_text().replace('"text":"a"', '"text":"changed"'))
 
-    status, manifest = await run_embed(config, cast(AsyncOpenAI, client))
+    status, manifest = await run_embed_async(config, cast(AsyncOpenAI, client))
 
     assert status is EmbeddingStatus.REBUILT
     assert len(client.calls) > calls
@@ -407,14 +408,14 @@ async def test_run_embed_force_or_new_model_rebuilds(
 
     config = run_embed_config
     client = FakeClient()
-    await run_embed(config, cast(AsyncOpenAI, client))
+    await run_embed_async(config, cast(AsyncOpenAI, client))
     calls = len(client.calls)
     if change == "force":
-        config = EmbedConfig(**(config.model_dump() | {"force": True}))
+        config = config.model_copy(update={"force": True})
     else:
-        config = EmbedConfig(**(config.model_dump() | {"embedding_model": "other-model"}))
+        config = config.model_copy(update={"embedding_model": "other-model"})
 
-    status, manifest = await run_embed(config, cast(AsyncOpenAI, client))
+    status, manifest = await run_embed_async(config, cast(AsyncOpenAI, client))
 
     assert status is EmbeddingStatus.REBUILT
     assert len(client.calls) > calls
@@ -429,21 +430,21 @@ async def test_run_embed_cache_ignores_nonsemantic_changes(
 
     config = run_embed_config
     client = FakeClient()
-    await run_embed(config, cast(AsyncOpenAI, client))
+    await run_embed_async(config, cast(AsyncOpenAI, client))
     calls = list(client.calls)
     if change == "path":
         moved = config.chunks.with_name("identical.jsonl")
         moved.write_bytes(config.chunks.read_bytes())
-        config = EmbedConfig(**(config.model_dump() | {"chunks": moved}))
+        config = config.model_copy(update={"chunks": moved})
     elif change == "mtime":
         import os
 
         old = config.chunks.stat()
         os.utime(config.chunks, ns=(old.st_atime_ns, old.st_mtime_ns + 1_000_000_000))
     else:
-        config = EmbedConfig(**(config.model_dump() | {"batch_size": 1}))
+        config = config.model_copy(update={"batch_size": 1})
 
-    status, _ = await run_embed(config, cast(AsyncOpenAI, client))
+    status, _ = await run_embed_async(config, cast(AsyncOpenAI, client))
 
     assert status is EmbeddingStatus.SKIPPED
     assert client.calls == calls
@@ -456,16 +457,17 @@ async def test_run_embed_cache_hit_does_not_parse_chunks(
     from mini_rag.embed import EmbeddingStatus
 
     client = FakeClient()
-    await run_embed(run_embed_config, cast(AsyncOpenAI, client))
+    await run_embed_async(run_embed_config, cast(AsyncOpenAI, client))
     calls = list(client.calls)
 
-    def fail_parse(*args: object, **kwargs: object) -> AsyncIterator[Chunk]:
+    def fail_parse(*_args: object, **_kwargs: object) -> AsyncIterator[Chunk]:
+        _ = _args, _kwargs
         pytest.fail("A cache hit must compare the hash without parsing chunks")
 
     monkeypatch.setattr(storage, "read_chunks_async", fail_parse)
     monkeypatch.setattr("mini_rag.embed.read_chunks_async", fail_parse)
 
-    status, _ = await run_embed(run_embed_config, cast(AsyncOpenAI, client))
+    status, _ = await run_embed_async(run_embed_config, cast(AsyncOpenAI, client))
 
     assert status is EmbeddingStatus.SKIPPED
     assert client.calls == calls
@@ -479,7 +481,7 @@ async def test_run_embed_unusable_cache_rebuilds(
 
     config = run_embed_config
     client = FakeClient()
-    await run_embed(config, cast(AsyncOpenAI, client))
+    await run_embed_async(config, cast(AsyncOpenAI, client))
     calls = len(client.calls)
     matrix_path = config.output_dir / "embeddings.npy"
     if damage == "missing":
@@ -495,7 +497,7 @@ async def test_run_embed_unusable_cache_rebuilds(
     else:
         (config.output_dir / "embedding_manifest.json").write_text("not JSON")
 
-    status, manifest = await run_embed(config, cast(AsyncOpenAI, client))
+    status, manifest = await run_embed_async(config, cast(AsyncOpenAI, client))
 
     assert status is EmbeddingStatus.REBUILT
     assert len(client.calls) > calls
@@ -529,7 +531,7 @@ def test_embed_main_passes_retry_timeout_and_valueless_force(
     constructor = MagicMock(return_value=fake)
     runner = AsyncMock()
     monkeypatch.setattr(embed, "AsyncOpenAI", constructor)
-    monkeypatch.setattr(embed, "run_embed", runner)
+    monkeypatch.setattr(embed, "run_embed_async", runner)
     monkeypatch.setenv("OPENAI_API_KEY", "test-not-a-real-key")
 
     embed.main(

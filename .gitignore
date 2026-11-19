@@ -4,3 +4,4 @@ data/pdfs/
 logs/
 index/
 .vscode/settings.json
+.envrc

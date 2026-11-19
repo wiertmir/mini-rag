@@ -24,6 +24,15 @@
                 "--chunks",
                 "index/chunks_600_90.jsonl"
             ]
+        },
+        {
+            "name": "Retrieve module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "mini_rag.retrieve",
+            "args": [
+                "What is the purpose of IPCC Working Group III?"
+            ]
         }
     ]
 }

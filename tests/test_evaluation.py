@@ -112,6 +112,7 @@ def make_chunk(document_id: str) -> Chunk:
         source_path=Path("dummy.pdf"),
         source_url="https://example.test/dummy.pdf",
         page=1,
+        page_end=1,
         text="Dummy text",
         token_count=2,
     )
@@ -182,7 +183,7 @@ async def run_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Pa
     monkeypatch.setattr(module, "AsyncOpenAI", lambda: client)
 
     output_dir = tmp_path / "results"
-    await module.eval_async(1, questions_path, index_dir, output_dir)
+    await module.eval_async(client, 1, questions_path, index_dir, output_dir)
     return output_dir, client
 
 

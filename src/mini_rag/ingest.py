@@ -94,8 +94,6 @@ def process_document(manifest: Manifest, config: IngestConfig) -> tuple[list[Chu
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    errors: list[str] = []
-
     parser = argparse.ArgumentParser(
         prog="python -m mini_rag.ingest",
         description=__doc__,
@@ -105,6 +103,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     config = load_config(IngestConfig, argv, parser)
     rich_struct.log.configure(file=config.log_folder)
 
+    run_ingest(config)
+
+
+def run_ingest(config):
+    errors: list[str] = []
     manifests = read_manifest_file(config.manifest)
 
     chunk_result: list[Chunk] = []

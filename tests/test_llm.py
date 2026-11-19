@@ -6,7 +6,7 @@ import pytest
 from openai import AsyncOpenAI
 from pydantic import ValidationError
 
-from mini_rag.config import AskConfig
+from mini_rag.config import DEFAULT_EMBEDDING_MODEL, AskConfig
 from mini_rag.errors import MissingParsedOutputError
 from mini_rag.llm import AnswerGenerator, OpenAIAnswerGenerator
 from mini_rag.models import LlmAnswer
@@ -148,7 +148,7 @@ def test_ask_index_dir_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MINI_RAG_CONFIG", raising=False)
     monkeypatch.delenv("INDEX_DIR", raising=False)
-    assert AskConfig().index_dir == Path("index")
+    assert AskConfig().index_dir == Path("index") / DEFAULT_EMBEDDING_MODEL
     (tmp_path / "config.toml").write_text('[ask]\nindex_dir="toml-index"\n')
     assert AskConfig().index_dir == Path("toml-index")
     (tmp_path / ".env").write_text("INDEX_DIR=dotenv-index\n")

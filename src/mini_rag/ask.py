@@ -1,7 +1,21 @@
+"""Using LLM answers the user question using only provided knowledge/context"""
+
+import argparse
+import asyncio
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from mini_rag.models import Chunk, Citation, LlmAnswer
+import rich_struct.log
+from openai import AsyncOpenAI, OpenAIError
+
+from mini_rag.config import AskConfig, HelpFormatter, load_config
+from mini_rag.helpers import ErrorHandler
+from mini_rag.llm import AnswerGenerator, OpenAIAnswerGenerator, OpenAIRetriever, Retriever
+from mini_rag.models import Answer, Chunk, Citation, LlmAnswer
+from mini_rag.prompts import build_context
+
+logger = rich_struct.log.get_logger()
 
 
 class InvalidCitationError(ValueError):
@@ -72,3 +86,65 @@ def resolve_citations(llm_answer: LlmAnswer, ref_map: dict[int, Chunk]) -> Resol
         raise InvalidCitationError(invalid_citations)
 
     return ResolvedCitations(citations, False, mismatched_citations, ref_num_list)
+
+
+async def ask_async(
+    question: str, retriever: Retriever, generator: AnswerGenerator, top_k: int | None = None
+) -> Answer:
+    logger.info("Retrieving closest semanticly chunks for user question")
+    search_results = await retriever.retrieve_async(question, top_k)
+    logger.info("Building question context")
+    question_context = build_context(search_results)
+    logger.info("Getting answer for user question from LLM")
+    llm_answer = await generator.generate_async(question, question_context)
+
+    resolved_citations = resolve_citations(llm_answer, question_context[1])
+    if resolved_citations.non_empty_citations_error:
+        logger.error("LLM failed to answer the question, but still returned non-empty cited refs")
+    if resolved_citations.mismatched_citations:
+        logger.warning(
+            "LLM text answer cites aren't returned in cited refs too: {}",
+            resolved_citations.mismatched_citations,
+        )
+    if resolved_citations.extra_references:
+        logger.warning("Some of the LLM returbed cited refs aren't part of text answer")
+
+    return Answer(
+        answer=llm_answer.answer,
+        citations=resolved_citations.resolved_citations,
+        insufficient_evidence=llm_answer.insufficient_evidence,
+        retrieved_chunk_ids=[
+            citation.chunk_id for citation in resolved_citations.resolved_citations
+        ],
+    )
+
+
+async def _run_async(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="python -m mini_rag.retrieve",
+        description=__doc__,
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+
+    config = load_config(AskConfig, argv, parser)
+    rich_struct.log.configure(console=False, file=config.log_folder)
+
+    async with AsyncOpenAI() as client:
+        retriever = OpenAIRetriever(config, client)
+        await retriever.load_index()
+
+        generator = OpenAIAnswerGenerator(client, config.answer_model)
+
+        answer = await ask_async(config.question, retriever, generator, config.top_k)
+
+    print(answer.answer)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    with ErrorHandler(OpenAIError, OSError, ValueError):
+        asyncio.run(_run_async(argv))
+
+
+if __name__ == "__main__":
+    main()

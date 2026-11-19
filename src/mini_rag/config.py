@@ -176,6 +176,7 @@ class RetrieveConfig(Config):
 class AskConfig(Config):
     model_config = SettingsConfigDict(toml_table_header=("ask",))
 
+    question: CliPositionalArg[str] = Field(description="user question")
     answer_model: str = Field(default="gpt-5.4-mini", description="Model that generates the answer")
     top_k: int = Field(default=5, ge=1, description="How many fragments go into the context")
 
@@ -233,7 +234,7 @@ def load_config[C: Config](
                 raise TypeError(f"Required setting {name!r} has no type annotation")
             info = copy.copy(field)
             info.default = None
-            resolution_fields[name] = (field.annotation | None, info)
+            resolution_fields[name] = (cast(Any, field.annotation) | None, info)
     resolution_model = create_model(config_cls.__name__, __base__=config_cls, **resolution_fields)
     try:
         resolved = resolution_model()

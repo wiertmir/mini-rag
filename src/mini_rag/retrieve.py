@@ -21,7 +21,7 @@ from mini_rag.errors import (
     IndexAndChunksNotSyncError,
 )
 from mini_rag.helpers import ErrorHandler
-from mini_rag.models import Chunk, SearchResult
+from mini_rag.models import Chunk, EmbeddingManifest, SearchResult
 from mini_rag.storage import load_index_async
 
 logger = rich_struct.log.get_logger()
@@ -86,6 +86,17 @@ async def _read_one_async(iter: AsyncIterator[list[float]]) -> list[float]:
 
 async def retrieve_async(config: RetrieveConfig, client: AsyncOpenAI) -> list[SearchResult]:
     index, chunks, manifest = await load_index_async(config.index_dir, config.chunks)
+
+    return await retrieve_from_index_async(config, client, index, manifest, chunks)
+
+
+async def retrieve_from_index_async(
+    config: RetrieveConfig,
+    client: AsyncOpenAI,
+    index: NDArray[np.float32],
+    manifest: EmbeddingManifest,
+    chunks: Sequence[Chunk],
+) -> list[SearchResult]:
     logger.debug("Searching for text {}", config.question)
     questions = _yield_one(config.question)
     model = manifest.model

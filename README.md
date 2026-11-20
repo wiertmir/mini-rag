@@ -1,271 +1,383 @@
 ## Running the project
 
-  > [!NOTE]
-  > `ingest`, `embed`, `retrieve`, `display`, and `ask` are implemented.
-  > Structured answer generation is available as an async Python component.
-  > Citation resolution is available as a Python component under review (issue #17).
+> [!NOTE]
+> `ingest`, `embed`, `retrieve`, `display`, and `ask` are implemented.
+> The complete answer pipeline (structured generation, citation resolution and
+> orchestration), retrieval smoke evaluation and end-to-end baseline are implemented.
+> Run the following commands from the repository root, in pipeline order.
 
-  ### 1. Set up the environment
+### 1. Set up the environment
 
-  The project supports Python 3.12 and 3.13 (`>=3.12,<3.14`) and uses Python 3.13.15 for
-  local development. PyMuPDF has compatibility issues with Python 3.14, so
-  Python 3.14 is not currently supported.
+The project supports Python 3.12 and 3.13 (`>=3.12,<3.14`) and uses Python 3.13.15 for
+local development. PyMuPDF has compatibility issues with Python 3.14, so
+Python 3.14 is not currently supported.
 
-  ```bash
-  pyenv install -s 3.13.15
-  pyenv local 3.13.15
+```bash
+pyenv install -s 3.13.15
+pyenv local 3.13.15
 
-  python -m pip install --upgrade pip
-  python -m pip install -e ".[dev]"
-  ```
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
 
-  ### 2. Verify the installation
+### 2. Verify the installation
 
-  ```bash
-  python --version
-  python -c "import mini_rag; print('The mini_rag package works')"
-  ```
+```bash
+python --version
+python -c "import mini_rag; print('The mini_rag package works')"
+```
 
-  Expected output:
+Expected output:
 
-  ```text
-  Python 3.13.15
-  The mini_rag package works
-  ```
+```text
+Python 3.13.15
+The mini_rag package works
+```
 
-  Ruff and mypy target Python 3.12, the minimum supported version. Run the
-  lint check with:
+Ruff and mypy target Python 3.12, the minimum supported version. Run the
+lint check with:
 
-  ```bash
-  python -m ruff check .
-  ```
+```bash
+python -m ruff check .
+```
 
-  ### Run the embedding tests
+### Run the embedding tests
 
-  ```bash
-  python -m pytest tests/test_embed.py
-  ```
+```bash
+python -m pytest tests/test_embed.py
+```
 
-  Async tests run automatically with `pytest-asyncio`, included in the dev
-  dependencies. The embedding tests use a fake client and make no API calls.
+Async tests run automatically with `pytest-asyncio`, included in the dev
+dependencies. The embedding tests use a fake client and make no API calls.
 
-  Logging is configured by the `embed` and `ingest` CLI entry points, not
-  when importing modules. Both commands write daily logs to `log_folder`
-  (`logs/` by default), named after the running script, for example
-  `embed_YYYY_MM_DD.log`. Ingest also configures its spawned worker processes.
-  Importing modules or collecting tests does not create log files.
+Logging is configured by the `embed` and `ingest` CLI entry points, not
+when importing modules. Both commands write daily logs to `log_folder`
+(`logs/` by default), named after the running script, for example
+`embed_YYYY_MM_DD.log`. Ingest also configures its spawned worker processes.
+Importing modules or collecting tests does not create log files.
 
-  ### Continuous integration
+### Continuous integration
 
-  - **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and every
-    pull request: `ruff check`, `ruff format --check`, `mypy src`, and
-    `pytest -m "not acceptance"` on Python 3.12 and 3.13. Reproduce locally:
-
-    ```bash
-    python -m ruff check . && python -m ruff format --check . \
-      && python -m mypy src && python -m pytest -q -m "not acceptance"
-    ```
-
-  - **Acceptance** (`.github/workflows/acceptance.yml`) runs the slow black-box
-    tests in `acceptance_tests/` (marker `acceptance`) and is started manually at
-    milestones:
-
-    ```bash
-    gh workflow run acceptance.yml              # all acceptance tests
-    gh workflow run acceptance.yml -f select=w01_d2
-    python -m pytest acceptance_tests -m acceptance -ra   # locally
-    ```
-
-    It downloads (and caches) the IPCC corpus and fails if any PDF is missing,
-    so missing data cannot turn into a green run full of skipped tests.
-
-  ### 3. Prepare the data
-
-  The `documents.csv`, `questions.jsonl`, and `download_pdfs.py` files should
-  be located in the `data/` directory.
-
-  Download the documents:
+- **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and every
+  pull request: `ruff check`, `ruff format --check`, `mypy src`, and
+  `pytest -m "not acceptance and not live"` on Python 3.12 and 3.13. Reproduce locally:
 
   ```bash
-  python data/download_pdfs.py
+  python -m ruff check . && python -m ruff format --check . \
+    && python -m mypy src && python -m pytest -q -m "not acceptance and not live"
   ```
 
-  The script should create a `data/pdfs/` directory containing 20 PDF documents.
-
-  Verify the dataset:
+- **Acceptance** (`.github/workflows/acceptance.yml`) runs the slow black-box
+  tests in `acceptance_tests/` (marker `acceptance`) and is started manually at
+  milestones:
 
   ```bash
-  test -f data/documents.csv
-  test -f data/questions.jsonl
-  test -f data/download_pdfs.py
-  test "$(find data/pdfs -maxdepth 1 -name '*.pdf' | wc -l)" -eq 20
-  test "$(wc -l < data/questions.jsonl)" -eq 30
+  gh workflow run acceptance.yml              # all acceptance tests
+  gh workflow run acceptance.yml -f select=w01_d2
+  python -m pytest acceptance_tests -m acceptance -ra   # locally
   ```
 
-  No output and an exit code of `0` mean that all checks passed.
+  It downloads (and caches) the IPCC corpus and fails if any PDF is missing,
+  so missing data cannot turn into a green run full of skipped tests.
 
-  ## Pipeline usage
+### 3. Prepare the data
 
-  Ingestion, embeddings, retrieval, chunk display and answer generation are available.
+The `documents.csv`, `questions.jsonl`, and `download_pdfs.py` files should
+be located in the `data/` directory.
 
-  ### Process the documents
+Download the documents:
 
-  ```bash
-  python -m mini_rag.ingest \
-    --manifest data/documents.csv \
-    --pdf-dir data/pdfs \
-    --output-dir index \
-    --chunk-size 600 \
-    --chunk-overlap 90
-  ```
+```bash
+python data/download_pdfs.py
+```
 
-  Ingest creates the output directory if needed and writes
-  `chunks_<chunk_size>_<chunk_overlap>.jsonl` and
-  `ingest_manifest_<chunk_size>_<chunk_overlap>.json` there. The command above
-  produces `index/chunks_600_90.jsonl` and `index/ingest_manifest_600_90.json`.
-  Different chunking settings can share the same output directory.
-  Configure it with `--output-dir`, `OUTPUT_DIR`, or `output_dir` in `[ingest]`.
+The script should create a `data/pdfs/` directory containing 20 PDF documents.
 
-  Chunking follows the document structure:
+Verify the dataset:
 
-  - A new section starts at every heading, unless the previous block is a
-    heading too, so `3` / `3.1 Introduction` stay together with their text.
-  - Sections run across page boundaries; a chunk records the page it starts on
-    (`page`) and ends on (`page_end`). `chunk_id` numbers chunks per start
-    page: `<document>_p<page>_c<n>`.
-  - A section below `--min-chunk-tokens` (default 150) is merged into the
-    next one (the last section of a document merges into the previous one).
-  - A section above `--chunk-size` is split into evenly sized windows sharing
-    `--chunk-overlap` tokens, so there are no tiny near-duplicate tails. Each
-    window ends at its token cut; the next one starts at the earliest paragraph
-    start (right after a blank line) inside the previous window from which it
-    still fits in `--chunk-size`, otherwise at its token cut. Neighbouring
-    windows therefore always share text, starting at a paragraph where possible.
-    Chunks of different sections do not overlap.
-  - Text blocks matching `skip_patterns` (figure and table captions such as
-    `Figure 1.1 | ...`, repeated `Box 1.1 (continued)` titles) are dropped.
-    Text interrupted by them is glued back together when the part before does
-    not end with a period and the part after starts with a lowercase letter or
-    punctuation. References such as `Figure 1.2 shows ...` are kept.
-  - A box (`box_pattern`, e.g. `Box 1.1 | ...`) starts its own section. If it
-    interrupts the main text, it is moved to the end of the section, right
-    before the next heading, and the main text is glued together.
+```bash
+test -f data/documents.csv
+test -f data/questions.jsonl
+test -f data/download_pdfs.py
+test "$(find data/pdfs -maxdepth 1 -name '*.pdf' | wc -l)" -eq 20
+test "$(wc -l < data/questions.jsonl)" -eq 30
+```
 
-  Both patterns are regular expressions configured in `[ingest]` of
-  `config.toml`.
+No output and an exit code of `0` mean that all checks passed.
 
-  Current defaults are `600/90` with `min_chunk_tokens=150`. The checked
-  local corpus has 6,264 chunks; use the manifest counts rather than treating
-  that number as an invariant for other configurations. A chunk ID encodes
-  its **start** page only; use `page_end` for the end of its source range.
-  Page indices are physical, 1-based and inclusive, not printed IPCC labels.
+### Offline quality gate
 
-  Configuration precedence is CLI → environment → `.env` → TOML → defaults.
-  The `.env.example` uses `CHUNK_SIZE=600` and `CHUNK_OVERLAP=90`, matching
-  the current baseline. Older private `.env` files may still override these
-  with historical values; check them before ingesting. `OPENAI_API_KEY` must be a real
-  key in your private environment; `<input_yours>` is only a placeholder.
-  Never commit the key or an environment file containing it.
+The default suite excludes opt-in tests marked `live`. Run both checks below;
+the closed endpoint catches accidental SDK calls even if `.env` still contains
+a key. Run them after installing the development dependencies:
 
-  The ingest manifest records the strategy (`"strategy": "sections"`) and
-  `min_chunk_tokens` next to the size and overlap.
+```bash
+env -u OPENAI_API_KEY pytest -q
+env -u OPENAI_API_KEY OPENAI_BASE_URL=http://127.0.0.1:9 pytest -q
+ruff check .
+ruff format --check .
+mypy src
+pytest -q
+```
 
-  The storage readers `mini_rag.storage.read_chunks_async` and
-  `read_chunk_list_async`
-  raise `ChunkParseError` for malformed JSON and `ChunkValidationError` for
-  records that do not satisfy the chunk schema. Both inherit from
-  `ChunkReadError`, expose `path` and the 1-based `line_no`, and preserve the
-  original Pydantic exception as their cause. Blank lines are invalid JSON;
-  filesystem errors propagate unchanged.
+Expected at the #20 refresh: **307 passed, 2 deselected**. No external services
+or API credentials are required. The two deselected tests are the paid generator
+checks. Opt in only with the prepared local index and an exported key:
 
-  ### Generate embeddings
+```bash
+pytest -q -m live
+```
 
-  Embedding settings use the `[embed]` TOML table. `chunks` is required and has
-  no default; provide it with `--chunks`, `CHUNKS`, or the TOML table.
-  Defaults are `output_dir = "index/text-embedding-3-small"`,
-  `embedding_model = "text-embedding-3-small"`, and `batch_size = 256`.
+This makes two live answer requests; it does not rebuild document embeddings.
+Acceptance exams are separate from the fast gate (see CI above).
 
-  The SDK handles retries with exponential backoff: `max_retries=5` and
-  `request_timeout=60` seconds by default (per request / batch). Use
-  `--max-retries` and `--request-timeout` to override them.
+## Pipeline usage
 
-  An unchanged chunk hash and embedding model with a usable cached matrix
-  produce an "Index is up to date" message and no embedding API calls; this
-  path does not parse chunks. Missing or corrupt cache artifacts trigger a
-  rebuild. `--force` forces recomputation; `force` may also be set persistently
-  through configuration. Changing only the input path, mtime or batch size
-  does not invalidate the cache. Reuse the existing artifacts when adapting
-  the project to a framework; do not pay to embed the same corpus again.
+Ingestion, embeddings, retrieval, chunk display and answer generation are available.
+Skip data download and ingestion when the validated corpus and manifests already
+exist. Export `OPENAI_API_KEY` in the shell for SDK commands; `.env` is settings
+input, not a shell export. Do not rerun paid steps just to inspect saved results.
 
-  `mini_rag.embed.save_index` requires a NumPy matrix with dtype `float32`.
-  Other dtypes raise `TypeError` before creating the output directory or
-  writing files; no implicit conversion is performed.
+| Step | Input | Output / effect |
+|---|---|---|
+| Ingest | `data/documents.csv`, `data/pdfs/` | `index/chunks_600_90.jsonl`, `index/ingest_manifest_600_90.json` |
+| Embed | Chunk JSONL (`--chunks` required) | `index/text-embedding-3-small/embeddings.npy`, `embedding_manifest.json` |
+| Retrieve / ask | Matching index, chunks and ingest manifest | Rich terminal output; `ask --json-output` emits `Answer` JSON |
+| Retrieval smoke | Same index + `data/questions.jsonl` | `retrieval_smoke.jsonl`, `retrieval_smoke_summary.json` |
+| Answer baseline | Same index + questions + answer model | `baseline.jsonl`, `baseline_summary.json` |
 
-  ```bash
-  python -m mini_rag.embed \
-    --chunks index/chunks_600_90.jsonl \
-    --output-dir index/text-embedding-3-small
-  ```
+The current index layout is **model-specific**: matrix and embedding manifest
+live under `index/text-embedding-3-small/`, not directly under `index/`.
+The embedding manifest's `chunks_path` points to the shared chunk JSONL;
+keep its adjacent ingest manifest too. Keep index files and chunks paired:
+the loader validates their hash/shape and refuses stale or mismatched artifacts.
 
-  ### Search the documents
+### Process the documents
 
-  ```bash
-  python -m mini_rag.retrieve \
-    "What is climate mitigation?" \
-    --top-k 5
-  ```
+```bash
+python -m mini_rag.ingest \
+  --manifest data/documents.csv \
+  --pdf-dir data/pdfs \
+  --output-dir index \
+  --chunk-size 600 \
+  --chunk-overlap 90 \
+  --min-chunk-tokens 150
+```
 
-  Retrieval results appear in a Rich table with rank, score, chunk ID,
-  document ID, page range, and text preview. API, filesystem, and validation errors
-  appear in red on stderr and exit with status 1.
+Ingest creates the output directory if needed and writes
+`chunks_<chunk_size>_<chunk_overlap>.jsonl` and
+`ingest_manifest_<chunk_size>_<chunk_overlap>.json` there. The command above
+produces `index/chunks_600_90.jsonl` and `index/ingest_manifest_600_90.json`.
+Different chunking settings can share the same output directory.
+Configure it with `--output-dir`, `OUTPUT_DIR`, or `output_dir` in `[ingest]`.
 
-  ### Display a document's chunks
+Chunking follows the document structure:
 
-  ```bash
-  python -m mini_rag.display --document-id WGIII_CH03
-  ```
+- A new section starts at every heading, unless the previous block is a
+  heading too, so `3` / `3.1 Introduction` stay together with their text.
+- Sections run across page boundaries; a chunk records the page it starts on
+  (`page`) and ends on (`page_end`). `chunk_id` numbers chunks per start
+  page: `<document>_p<page>_c<n>`.
+- A section below `--min-chunk-tokens` (default 150) is merged into the
+  next one (the last section of a document merges into the previous one).
+- A section above `--chunk-size` is split into evenly sized windows sharing
+  `--chunk-overlap` tokens, so there are no tiny near-duplicate tails. Each
+  window ends at its token cut; the next one starts at the earliest paragraph
+  start (right after a blank line) inside the previous window from which it
+  still fits in `--chunk-size`, otherwise at its token cut. Neighbouring
+  windows therefore always share text, starting at a paragraph where possible.
+  Chunks of different sections do not overlap.
+- Text blocks matching `skip_patterns` (figure and table captions such as
+  `Figure 1.1 | ...`, repeated `Box 1.1 (continued)` titles) are dropped.
+  Text interrupted by them is glued back together when the part before does
+  not end with a period and the part after starts with a lowercase letter or
+  punctuation. References such as `Figure 1.2 shows ...` are kept.
+- A box (`box_pattern`, e.g. `Box 1.1 | ...`) starts its own section. If it
+  interrupts the main text, it is moved to the end of the section, right
+  before the next heading, and the main text is glued together.
 
-  Shows every chunk of the document in a Rich table with chunk ID and full,
-  multiline text and its page range. Text shared by consecutive chunks (the
-  windows of one section) appears in a separate yellow row labelled, for
-  example, `c001 ↔ c002`; shared matches shorter than 20 characters are
-  ignored. Chunks that share no text, i.e. different sections, are separated
-  by lines. Chunks are read from `--chunks`, or from the
-  `chunks_path` in `<index_dir>/embedding_manifest.json` when omitted
-  (`--index-dir`, default `index/text-embedding-3-small`; TOML table `[display]`).
+Both patterns are regular expressions configured in `[ingest]` of
+`config.toml`.
 
-  Limit the output to some pages with `--pages`, using 1-based inclusive
-  ranges separated by commas. Open ranges are allowed: `5-` means page 5 to
-  the end and `-3` means pages 1–3. Use the `=` form so a leading `-` is not
-  read as an option. A chunk is shown when any of its pages is selected. A
-  selection without chunks shows an empty table.
+Current defaults are `600/90` with `min_chunk_tokens=150`. The checked
+section-based corpus used in review has 6,264 chunks; use the manifest counts rather than treating
+that number as an invariant for other configurations. A chunk ID encodes
+its **start** page only; use `page_end` for the end of its source range.
+Page indices are physical, 1-based and inclusive, not printed IPCC labels.
 
-  ```bash
-  python -m mini_rag.display --document-id WGIII_CH03 --pages="3-7,9,14-"
-  ```
+Configuration precedence is CLI → environment → `.env` → TOML → defaults.
+The `.env.example` uses `CHUNK_SIZE=600` and `CHUNK_OVERLAP=90`, matching
+the current baseline. Older private `.env` files may still override these
+with historical values; check them before ingesting. `OPENAI_API_KEY` must be a real
+key in your private environment; `<input_yours>` is only a placeholder.
+Never commit the key or an environment file containing it.
 
-  ### Ask a question
+Historical per-page indexes are not the current section-based baseline: do
+not mix their matrices, manifests or measurements with current chunks.
 
-  ```bash
-  python -m mini_rag.ask \
-    "What is climate mitigation?" \
-    --top-k 5
-  ```
+The ingest manifest records the strategy (`"strategy": "sections"`) and
+`min_chunk_tokens` next to the size and overlap.
 
-  The `ask` command displays the answer in a dimmed blue-gray Rich panel, with dimmed
-  blue citations below the answer inside the same panel (only `ref`, `document_id`,
-  `page`, and `page_end`).
-  Answers with insufficient evidence use a dimmed orange-gray border and no citations.
-  In Python or notebooks, use `mini_rag.ask.print_answer(answer)` for the same display.
+The storage readers `mini_rag.storage.read_chunks_async` and
+`read_chunk_list_async`
+raise `ChunkParseError` for malformed JSON and `ChunkValidationError` for
+records that do not satisfy the chunk schema. Both inherit from
+`ChunkReadError`, expose `path` and the 1-based `line_no`, and preserve the
+original Pydantic exception as their cause. Blank lines are invalid JSON;
+filesystem errors propagate unchanged.
 
-  Add `--min-score 0.5` to keep only retrieved chunks whose cosine similarity is
-  at least `0.5`. The optional threshold defaults to `None` (no filtering), accepts
-  values in `[-1, 1]`, and can also be set with `MIN_SCORE` or `min_score` in `[ask]`.
-  Filtering applies after top-k retrieval; it does not fetch replacement chunks.
-  If retrieval returns no chunks, `ask_async` returns a local refusal without calling
-  the answer model: `insufficient_evidence=true`, `citations=[]`, and
-  `retrieved_chunk_ids=[]`. Query embedding is still needed for score-based retrieval;
-  an empty index remains an error.
+### Generate embeddings
+
+Embedding settings use the `[embed]` TOML table. `chunks` is required and has
+no default; provide it with `--chunks`, `CHUNKS`, or the TOML table.
+Defaults are `output_dir = "index/text-embedding-3-small"`,
+`embedding_model = "text-embedding-3-small"`, and `batch_size = 256`.
+
+The SDK handles retries with exponential backoff: `max_retries=5` and
+`request_timeout=60` seconds by default (per request / batch). Use
+`--max-retries` and `--request-timeout` to override them.
+
+An unchanged chunk hash and embedding model with a usable cached matrix
+produce an "Index is up to date" message and no embedding API calls; this
+path does not parse chunks. Missing or corrupt cache artifacts trigger a
+rebuild. `--force` forces recomputation; `force` may also be set persistently
+through configuration. Changing only the input path, mtime or batch size
+does not invalidate the cache. Reuse the existing artifacts when adapting
+the project to a framework; do not pay to embed the same corpus again.
+
+`mini_rag.embed.save_index` requires a NumPy matrix with dtype `float32`.
+Other dtypes raise `TypeError` before creating the output directory or
+writing files; no implicit conversion is performed.
+
+```bash
+python -m mini_rag.embed \
+  --chunks index/chunks_600_90.jsonl \
+  --output-dir index/text-embedding-3-small
+```
+
+### Search the documents
+
+```bash
+python -m mini_rag.retrieve \
+  "What is climate mitigation?" \
+  --top-k 5
+```
+
+Retrieval results appear in a Rich table with rank, score, chunk ID,
+document ID, page range, and text preview. API, filesystem, and validation errors
+appear in red on stderr and exit with status 1.
+
+### Display a document's chunks
+
+```bash
+python -m mini_rag.display --document-id WGIII_CH03
+```
+
+Shows every chunk of the document in a Rich table with chunk ID and full,
+multiline text and its page range. Text shared by consecutive chunks (the
+windows of one section) appears in a separate yellow row labelled, for
+example, `c001 ↔ c002`; shared matches shorter than 20 characters are
+ignored. Chunks that share no text, i.e. different sections, are separated
+by lines. Chunks are read from `--chunks`, or from the
+`chunks_path` in `<index_dir>/embedding_manifest.json` when omitted
+(`--index-dir`, default `index/text-embedding-3-small`; TOML table `[display]`).
+
+Limit the output to some pages with `--pages`, using 1-based inclusive
+ranges separated by commas. Open ranges are allowed: `5-` means page 5 to
+the end and `-3` means pages 1–3. Use the `=` form so a leading `-` is not
+read as an option. A chunk is shown when any of its pages is selected. A
+selection without chunks shows an empty table.
+
+```bash
+python -m mini_rag.display --document-id WGIII_CH03 --pages="3-7,9,14-"
+```
+
+### Ask a question
+
+```bash
+python -m mini_rag.ask \
+  "What is climate mitigation?" \
+  --top-k 5
+```
+
+The `ask` command displays the answer in a dimmed blue-gray Rich panel, with dimmed
+blue citations below the answer inside the same panel (only `ref`, `document_id`,
+`page`, and `page_end`).
+Answers with insufficient evidence use a dimmed orange-gray border and no citations.
+In Python or notebooks, use `mini_rag.ask.print_answer(answer)` for the same display.
+
+Add `--min-score 0.5` to keep only retrieved chunks whose cosine similarity is
+at least `0.5`. The optional threshold defaults to `None` (no filtering), accepts
+values in `[-1, 1]`, and can also be set with `MIN_SCORE` or `min_score` in `[ask]`.
+Filtering applies after top-k retrieval; it does not fetch replacement chunks.
+If retrieval returns no chunks, `ask_async` returns a local refusal without calling
+the answer model: `insufficient_evidence=true`, `citations=[]`, and
+`retrieved_chunk_ids=[]`. Query embedding is still needed for score-based retrieval;
+an empty index remains an error.
+
+### Retrieval smoke evaluation (#11)
+
+```bash
+python eval/retrieval_smoke.py --questions data/questions.jsonl \
+  --index-dir index/text-embedding-3-small --top-k 5 \
+  --output-dir eval/results/text-embedding-3-small/runs/first-smoke
+```
+
+This embeds the 30 queries (paid with OpenAI) but reuses document embeddings.
+It writes `retrieval_smoke.jsonl` (ranked chunks, document hit per question) and
+`retrieval_smoke_summary.json` (answerable denominator, hit count, misses and
+index fingerprint) in the output directory. Unanswerable questions are excluded
+from hit@5. Unlike the answer baseline, this script can overwrite its output;
+use a fresh directory, leaving committed smoke results untouched.
+
+### End-to-end answer baseline (#19)
+
+`eval/run_baseline.py` evaluates the full answer path sequentially, reusing one
+loaded index and SDK client. It writes one Pydantic record per question to
+`baseline.jsonl`, followed by `baseline_summary.json` containing configuration,
+input/prompt fingerprints, counts, and latency statistics.
+
+```bash
+python eval/run_baseline.py --questions data/questions.jsonl \
+  --index-dir index/text-embedding-3-small \
+  --model gpt-5.4-mini \
+  --output-dir eval/results/text-embedding-3-small/gpt-5.4-mini/runs/first-run
+```
+
+This is a paid live run with the default OpenAI client: 30 answer attempts plus
+query embeddings; do not rerun it merely to inspect the committed results.
+Use a **new output directory** for each experiment; `runs/first-run` above
+must not already contain either baseline file. Both artifacts are created in
+that directory. The committed reference remains at
+`eval/results/text-embedding-3-small/gpt-5.4-mini/baseline.jsonl` and
+`baseline_summary.json`; do not overwrite it to check installation.
+The CLI uses `--output-dir`, not `--output`.
+
+The committed run contains 30 records, 25/28 answerable citation hits, two
+refusals (Q29/Q30), zero execution errors and zero invalid citations. A citation
+hit means at least one expected document was cited, not that answer correctness
+has been independently graded. Errors use null answer fields and null
+`cites_expected_document`; failed answerable questions remain in the denominator.
+Errors and refusals are disjoint; latency includes every attempted question.
+
+The saved dataset fingerprint matches CRLF encoding of the checked-in LF
+question file; the record contents and labels match. Compare exact hashes only
+when the file bytes, including line endings, are identical. The saved prompt
+and ingest parameters match the current prompt and local manifest. All 68 citation document IDs and page ranges match the local chunks.
+The baseline chunk fingerprint differs from the current local index; the exact
+historical retrieval context cannot be reproduced from this local index alone.
+These checks made no API calls.
+
+**Review status:** approved after re-review of `4b0ffdd`. Both output files are
+protected against accidental overwrites; pass `--force` to deliberately replace
+them. An old summary is removed before an authorized replacement run, so an
+interruption cannot leave a stale completion marker. Generic errors store the
+exception class name. `--local-ollama` is a presence flag: omit it for OpenAI;
+`--local-ollama False` is rejected rather than selecting the wrong endpoint.
+Offline verification: 307 tests passed, 2 live tests deselected; the evaluation
+module has 32 passing cases, including force/interrupt/CLI regressions. The
+historical-index fingerprint limitation above remains, not a claim of exact
+retrieval reproduction.
 
 ## Structured answer generation (Python component)
 
@@ -295,8 +407,9 @@ the response ID, status, safety refusal text (if present), and incomplete
 reason (if present). Error messages distinguish safety refusals, incomplete
 responses and otherwise missing parsed output; inspect the status/reason
 for programmatic handling.
-Transport/API errors propagate to the caller. INFO logs include model,
-latency and token usage, not the full question or context.
+Transport/API errors propagate to the caller. Generator INFO logs include
+model, latency and token usage, not the context. The `ask_async` orchestration
+also logs the question text at INFO; consider log files part of your private data.
 
 ### Generator checks
 
@@ -513,47 +626,3 @@ python -m mini_rag.ask "What is climate mitigation?" --json-output \
 
 The implicit boolean flag also follows normal configuration precedence via
 `JSON_OUTPUT` or `json_output` in `[ask]`.
-
-### End-to-end answer baseline (#19)
-
-`eval/run_baseline.py` evaluates the full answer path sequentially, reusing one
-loaded index and SDK client. It writes one Pydantic record per question to
-`baseline.jsonl`, followed by `baseline_summary.json` containing configuration,
-input/prompt fingerprints, counts, and latency statistics.
-
-```bash
-python eval/run_baseline.py --questions data/questions.jsonl \
-  --index-dir index/text-embedding-3-small \
-  --model gpt-5.4-mini \
-  --output-dir eval/results/text-embedding-3-small/gpt-5.4-mini
-```
-
-This is a paid live run with the default OpenAI client: 30 answer attempts plus
-query embeddings; do not rerun it merely to inspect the committed results.
-The CLI uses `--output-dir`, not the earlier card example's `--output`.
-
-The committed run contains 30 records, 25/28 answerable citation hits, two
-refusals (Q29/Q30), zero execution errors and zero invalid citations. A citation
-hit means at least one expected document was cited, not that answer correctness
-has been independently graded. Errors use null answer fields and null
-`cites_expected_document`; failed answerable questions remain in the denominator.
-Errors and refusals are disjoint; latency includes every attempted question.
-
-The saved dataset fingerprint matches CRLF encoding of the checked-in LF
-question file; the record contents and labels match. Compare exact hashes only
-when the file bytes, including line endings, are identical. The saved prompt
-and ingest parameters match the current prompt and local manifest. All 68 citation document IDs and page ranges match the local chunks.
-The baseline chunk fingerprint differs from the current local index; the exact
-historical retrieval context cannot be reproduced from this local index alone.
-These checks made no API calls.
-
-**Review status:** approved after re-review of `4b0ffdd`. Both output files are
-protected against accidental overwrites; pass `--force` to deliberately replace
-them. An old summary is removed before an authorized replacement run, so an
-interruption cannot leave a stale completion marker. Generic errors store the
-exception class name. `--local-ollama` is a presence flag: omit it for OpenAI;
-`--local-ollama False` is rejected rather than selecting the wrong endpoint.
-Offline verification: 307 tests passed, 2 live tests deselected; the evaluation
-module has 32 passing cases, including force/interrupt/CLI regressions. The
-historical-index fingerprint limitation above remains, not a claim of exact
-retrieval reproduction.

@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 import json
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -13,25 +13,18 @@ from openai import AsyncOpenAI, OpenAIError
 
 from mini_rag.config import DEFAULT_EMBEDDING_MODEL
 from mini_rag.embed import embed_texts_async
-from mini_rag.evaluation import is_hit, summarize_evaluation
+from mini_rag.evaluation import is_hit, load_questions_async, summarize_evaluation
 from mini_rag.helpers import ErrorHandler
-from mini_rag.models import Question, RetrievalSmokeRecord, RetrievedChunkRecord
+from mini_rag.models import RetrievalSmokeRecord, RetrievedChunkRecord
 from mini_rag.retrieve import search
 from mini_rag.storage import load_index_async
 
 logger = rich_struct.log.get_logger()
 
 
-async def load_questions_async(questions_path: Path) -> AsyncIterator[Question]:
-    async with aiofiles.open(questions_path, mode="r", encoding="utf-8") as file:
-        async for line in file:
-            question = Question.model_validate_json(line)
-            yield question
-
-
 async def run_async(argv: Iterable[str] | None = None):
     parser = argparse.ArgumentParser(
-        description="Evaluates retrieved documents aginst provied set of questions and expected answers"
+        description="Evaluates retrieved documents against provided set of questions and expected answers"
     )
 
     parser.add_argument(
@@ -41,7 +34,7 @@ async def run_async(argv: Iterable[str] | None = None):
         "--top-k",
         type=int,
         default=5,
-        help="How many search results use to compare with exected answers",
+        help="How many search results use to in question context",
     )
     parser.add_argument(
         "--index-dir",
@@ -85,7 +78,7 @@ async def eval_async(
         aiofiles.open(smoke_jsonl_path, mode="w", encoding="utf-8") as smoke_file,
     ):
         q_vectors = embed_texts_async(
-            (q.question async for q in embedding_questions), client, index.manifest.model
+            (q.question async for q in embedding_questions), client, index.embedding_manifest.model
         )
         async for question, vector in zip_async(questions, q_vectors, strict=True):
             results = search(vector, index.embeddings_matrix, index.chunks, top_k)
@@ -120,9 +113,9 @@ async def eval_async(
     logger.info("Saving retrieval smoke evaluation summary to {}", smoke_summary_json_path)
     async with aiofiles.open(smoke_summary_json_path, mode="w", encoding="utf-8") as summary_file:
         summary = {
-            "model": index.manifest.model,
+            "model": index.embedding_manifest.model,
             "top_k": top_k,
-            "chunks_sha256": index.manifest.chunks_sha256,
+            "chunks_sha256": index.embedding_manifest.chunks_sha256,
             "answerable": answerable_count,
             "hits": hit_count,
             "missed_ids": missed_questions,

@@ -69,8 +69,8 @@ def test_ingest_passes_manifest_to_extraction(
     chunks, stats = ingest.process_document(manifests[0], config)
 
     assert chunks == []
-    assert stats["sha_256"] == ingest.calculate_file_sha(pdf_path)
-    assert stats["status"] == "ok"
+    assert stats.sha_256 == ingest.calculate_file_sha(pdf_path)
+    assert stats.status == "ok"
     assert received == [
         Manifest(
             id="sample",

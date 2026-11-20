@@ -21,7 +21,7 @@ pytestmark = pytest.mark.live
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def fixed_context() -> tuple[str, dict[int, Chunk]]:
-    loaded = await load_index_async(AskConfig().index_dir)
+    loaded = await load_index_async(AskConfig(question="unused").index_dir)
     chunk = next(c for c in loaded.chunks if c.chunk_id == "WGIII_CH07_p008_c001")
     assert (
         hashlib.sha256(chunk.text.encode()).hexdigest()
@@ -34,7 +34,9 @@ async def test_supported_context_produces_cited_answer(
     fixed_context: tuple[str, dict[int, Chunk]],
 ) -> None:
     async with AsyncOpenAI(max_retries=0, timeout=45) as client:
-        result = await OpenAIAnswerGenerator(client, AskConfig().answer_model).generate_async(
+        result = await OpenAIAnswerGenerator(
+            client, AskConfig(question="unused").answer_model
+        ).generate_async(
             "What four broad categories of mitigation measures does this chapter describe?",
             fixed_context,
         )
@@ -45,8 +47,8 @@ async def test_supported_context_produces_cited_answer(
 
 async def test_q29_refuses_without_evidence(fixed_context: tuple[str, dict[int, Chunk]]) -> None:
     async with AsyncOpenAI(max_retries=0, timeout=45) as client:
-        result = await OpenAIAnswerGenerator(client, AskConfig().answer_model).generate_async(
-            "How much did Apple earn in fiscal year 2025?", fixed_context
-        )
+        result = await OpenAIAnswerGenerator(
+            client, AskConfig(question="unused").answer_model
+        ).generate_async("How much did Apple earn in fiscal year 2025?", fixed_context)
     assert result.insufficient_evidence is True
     assert result.cited_refs == []

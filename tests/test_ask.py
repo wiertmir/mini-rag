@@ -9,7 +9,15 @@ import pytest
 from mini_rag.ask import InvalidCitationError, ask_async, resolve_citations
 from mini_rag.config import AskConfig, load_config
 from mini_rag.llm import AnswerGenerator, OpenAIRetriever, Retriever
-from mini_rag.models import Chunk, EmbeddingManifest, LlmAnswer, SearchResult
+from mini_rag.models import (
+    Chunk,
+    EmbeddingManifest,
+    IngestManifest,
+    IngestManifestParameters,
+    IngestManifestSummary,
+    LlmAnswer,
+    SearchResult,
+)
 
 
 @pytest.fixture
@@ -33,6 +41,27 @@ def ref_map() -> dict[int, Chunk]:
 
 def answer(text: str, refs: list[int], *, refusal: bool = False) -> LlmAnswer:
     return LlmAnswer(answer=text, cited_refs=refs, insufficient_evidence=refusal)
+
+
+def write_ingest_manifest(chunks_path: Path) -> None:
+    manifest = IngestManifest(
+        parameters=IngestManifestParameters(
+            tokenizer="test",
+            chunk_size=600,
+            chunk_overlap=90,
+            strategy="sections",
+            min_chunk_tokens=0,
+            skip_patterns=[],
+            box_pattern=None,
+        ),
+        summary=IngestManifestSummary(documents=0, pages=0, chunks=0, errors=0),
+        documents=[],
+        errors=[],
+    )
+    manifest_path = chunks_path.with_name(
+        f"ingest_manifest{chunks_path.stem.removeprefix('chunks')}.json"
+    )
+    manifest_path.write_text(manifest.model_dump_json(), encoding="utf-8")
 
 
 def test_maps_metadata_and_both_physical_page_endpoints(ref_map: dict[int, Chunk]) -> None:
@@ -179,12 +208,34 @@ async def test_score_filter_and_no_evidence_refusal(
         chunks_path=tmp_path / "chunks.jsonl",
         chunks_sha256="0" * 64,
     )
+    ingest_manifest = IngestManifest(
+        parameters=IngestManifestParameters(
+            tokenizer="test",
+            chunk_size=600,
+            chunk_overlap=90,
+            strategy="sections",
+            min_chunk_tokens=0,
+            skip_patterns=[],
+            box_pattern=None,
+        ),
+        summary=IngestManifestSummary(documents=0, pages=0, chunks=0, errors=0),
+        documents=[],
+        errors=[],
+    )
     monkeypatch.setattr(
         "mini_rag.llm.load_index_async",
-        AsyncMock(return_value=(np.eye(2, dtype=np.float32), list(ref_map.values())[:2], manifest)),
+        AsyncMock(
+            return_value=(
+                np.eye(2, dtype=np.float32),
+                list(ref_map.values())[:2],
+                ingest_manifest,
+                manifest,
+            )
+        ),
     )
     monkeypatch.setattr("mini_rag.llm.retrieve_from_index_async", AsyncMock(return_value=results))
-    retriever = OpenAIRetriever(AskConfig(question="Question?", min_score=min_score), AsyncMock())
+    config = AskConfig(question="Question?")
+    retriever = OpenAIRetriever(config.index_dir, AsyncMock(), min_score)
     await retriever.load_index()
     generator = AsyncMock(spec=AnswerGenerator)
     if expected_refs:
@@ -194,7 +245,7 @@ async def test_score_filter_and_no_evidence_refusal(
     else:
         generator.generate_async.side_effect = AssertionError("Must not call the model")
 
-    result = await ask_async("Question?", retriever, generator)
+    result = await ask_async("Question?", retriever, generator, config.top_k)
 
     assert result.insufficient_evidence is (not expected_refs)
     assert [citation.ref for citation in result.citations] == expected_refs
@@ -258,7 +309,7 @@ async def test_ask_invalid_citation_reaches_caller(ref_map: dict[int, Chunk]) ->
     generator = AsyncMock(spec=AnswerGenerator)
     generator.generate_async.return_value = answer("Invented [7]", [7])
     with pytest.raises(InvalidCitationError) as caught:
-        await ask_async("Question?", retriever, generator)
+        await ask_async("Question?", retriever, generator, 5)
     assert caught.value.invalid_refs == [7]
 
 
@@ -269,7 +320,7 @@ async def test_ask_generation_error_reaches_caller(ref_map: dict[int, Chunk]) ->
     failure = RuntimeError("generation failed")
     generator.generate_async.side_effect = failure
     with pytest.raises(RuntimeError) as caught:
-        await ask_async("Question?", retriever, generator)
+        await ask_async("Question?", retriever, generator, 5)
     assert caught.value is failure
 
 
@@ -279,9 +330,10 @@ async def test_retriever_requires_explicit_initialization(
     from mini_rag.errors import NotInitializedError
 
     monkeypatch.chdir(tmp_path)
-    retriever = OpenAIRetriever(AskConfig(question="Question?"), AsyncMock())
+    config = AskConfig(question="Question?")
+    retriever = OpenAIRetriever(config.index_dir, AsyncMock())
     with pytest.raises(NotInitializedError):
-        await retriever.retrieve_async("Question?")
+        await retriever.retrieve_async("Question?", 5)
 
 
 async def test_retriever_loads_once_and_uses_manifest_model_for_every_query(
@@ -293,8 +345,9 @@ async def test_retriever_loads_once_and_uses_manifest_model_for_every_query(
     from mini_rag.storage import calculate_file_sha, save_index
 
     monkeypatch.chdir(tmp_path)
-    chunks = tmp_path / "chunks.jsonl"
+    chunks = tmp_path / "chunks_600_90.jsonl"
     chunks.write_text("".join(ref_map[i].model_dump_json() + "\n" for i in (1, 2)))
+    write_ingest_manifest(chunks)
     index = tmp_path / "index"
     save_index(
         index,
@@ -314,7 +367,8 @@ async def test_retriever_loads_once_and_uses_manifest_model_for_every_query(
         data=[SimpleNamespace(index=0, embedding=[1.0, 0.0])],
         usage=SimpleNamespace(total_tokens=1),
     )
-    retriever = OpenAIRetriever(AskConfig(question="unused", index_dir=index, top_k=2), client)
+    config = AskConfig(question="unused", index_dir=index, top_k=2)
+    retriever = OpenAIRetriever(config.index_dir, client)
     await retriever.load_index()
     for question in ("first question", "second question"):
         results = await retriever.retrieve_async(question, top_k=1)
@@ -343,7 +397,9 @@ def cli_fakes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[AsyncMoc
     # CLI logging is process-global; keep it isolated from later tests.
     monkeypatch.setattr(ask_module.rich_struct.log, "configure", lambda **kwargs: None)
     monkeypatch.setattr(ask_module, "AsyncOpenAI", lambda: client)
-    monkeypatch.setattr(ask_module, "OpenAIRetriever", lambda config, client: retriever)
+    monkeypatch.setattr(
+        ask_module, "OpenAIRetriever", lambda index_dir, client, min_score: retriever
+    )
     monkeypatch.setattr(ask_module, "OpenAIAnswerGenerator", lambda client, model: object())
     runner = AsyncMock()
     monkeypatch.setattr(ask_module, "ask_async", runner)

@@ -78,3 +78,7 @@ class MissingParsedOutputError(Exception):
 
 class NotInitializedError(Exception):
     """Raised when system element is not initialized"""
+
+
+class OutputAlreadyExists(FileExistsError):
+    """Raised when baseline evaluation output already exists."""

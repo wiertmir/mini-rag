@@ -85,9 +85,9 @@ async def _read_one_async(iter: AsyncIterator[list[float]]) -> list[float]:
 
 
 async def retrieve_async(config: RetrieveConfig, client: AsyncOpenAI) -> list[SearchResult]:
-    index, chunks, manifest = await load_index_async(config.index_dir, config.chunks)
+    index, chunks, _, embedding_manifest = await load_index_async(config.index_dir, config.chunks)
 
-    return await retrieve_from_index_async(config, client, index, manifest, chunks)
+    return await retrieve_from_index_async(config, client, index, embedding_manifest, chunks)
 
 
 async def retrieve_from_index_async(

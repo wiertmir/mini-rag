@@ -18,6 +18,7 @@ def chunk() -> Chunk:
         source_path=Path("sample.pdf"),
         source_url="https://example.test/sample.pdf",
         page=1,
+        page_end=1,
         text="Sample text",
         token_count=2,
     )
@@ -36,6 +37,7 @@ async def test_read_valid_chunks(tmp_path: Path, chunk: Chunk) -> None:
         source_path=Path("sample.pdf"),
         source_url="https://example.test/sample.pdf",
         page=1,
+        page_end=1,
         text="Second chunk",
         token_count=2,
     )

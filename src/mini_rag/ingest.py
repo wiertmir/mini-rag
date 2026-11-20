@@ -2,34 +2,29 @@
 
 import argparse
 import csv
-import json
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from multiprocessing import get_context
 from pathlib import Path
-from typing import TypedDict
 
 import pymupdf
 import rich_struct.log
 
 from mini_rag.chunk import CHUNK_MODEL, Block, chunk_blocks
 from mini_rag.config import HelpFormatter, IngestConfig, load_config
-from mini_rag.models import Chunk, Manifest
+from mini_rag.hashing import calculate_file_sha
+from mini_rag.models import (
+    Chunk,
+    IngestManifest,
+    IngestManifestDocument,
+    IngestManifestParameters,
+    IngestManifestSummary,
+    Manifest,
+)
 from mini_rag.pdf_parsers import PdfDocument, TextExtractionConfig, extract_text
-from mini_rag.storage import calculate_file_sha
 
 log = rich_struct.log.get_logger()
-
-
-class DocumentStats(TypedDict):
-    document_id: str
-    source_path: str
-    sha_256: str | None
-    pages: int
-    chunks: int
-    status: str
-    error: str | None
 
 
 def read_manifest_file(manifest_path: Path) -> list[Manifest]:
@@ -46,7 +41,9 @@ def parse_pdf_text(manifest: Manifest, parent_folder: Path) -> PdfDocument:
     return extract_text(pdf_path, pdf_extract_config, manifest)
 
 
-def process_document(manifest: Manifest, config: IngestConfig) -> tuple[list[Chunk], DocumentStats]:
+def process_document(
+    manifest: Manifest, config: IngestConfig
+) -> tuple[list[Chunk], IngestManifestDocument]:
     doc = parse_pdf_text(manifest, config.pdf_dir)
     chunks: list[Chunk] = []
     log.info("Chunking file {}", doc.source_path)
@@ -81,15 +78,15 @@ def process_document(manifest: Manifest, config: IngestConfig) -> tuple[list[Chu
                 token_count=text_chunk.token_count,
             )
         )
-    stats: DocumentStats = {
-        "document_id": doc.id,
-        "source_path": doc.source_path,
-        "sha_256": calculate_file_sha(Path(doc.source_path)),
-        "pages": len(doc.pages),
-        "chunks": len(chunks),
-        "status": "ok",
-        "error": None,
-    }
+    stats = IngestManifestDocument(
+        document_id=doc.id,
+        source_path=doc.source_path,
+        sha_256=calculate_file_sha(Path(doc.source_path)),
+        pages=len(doc.pages),
+        chunks=len(chunks),
+        status="ok",
+        error=None,
+    )
     return chunks, stats
 
 
@@ -115,7 +112,7 @@ def run_ingest(config: IngestConfig) -> None:
     docs_no = 0
     total_pages = 0
 
-    doc_stats = []
+    doc_stats: list[IngestManifestDocument] = []
 
     with ProcessPoolExecutor(
         max_workers=max(1, min(4, len(manifests))),
@@ -131,18 +128,18 @@ def run_ingest(config: IngestConfig) -> None:
                 error = f"{manifest.id}: {type(exc).__name__}: {exc}"
                 log.error("Failed to process {}", error)
                 errors.append(error)
-                stats = {
-                    "document_id": manifest.id,
-                    "source_path": str(config.pdf_dir / f"{manifest.id}.pdf"),
-                    "sha_256": None,
-                    "pages": 0,
-                    "chunks": 0,
-                    "status": "error",
-                    "error": error,
-                }
+                stats = IngestManifestDocument(
+                    document_id=manifest.id,
+                    source_path=str(config.pdf_dir / f"{manifest.id}.pdf"),
+                    sha_256=None,
+                    pages=0,
+                    chunks=0,
+                    status="error",
+                    error=error,
+                )
             else:
                 chunk_result.extend(chunks)
-                total_pages += stats["pages"]
+                total_pages += stats.pages
             doc_stats.append(stats)
 
     save_ingest_manifest(config, docs_no, total_pages, chunk_result, doc_stats, errors)
@@ -150,12 +147,17 @@ def run_ingest(config: IngestConfig) -> None:
         raise SystemExit(1)
 
 
+def load_ingest_manifest(manifest_path: Path) -> IngestManifest:
+    log.info("Reading ingest manifest from {}", manifest_path)
+    return IngestManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+
+
 def save_ingest_manifest(
     config: IngestConfig,
     docs: int,
     pages: int,
     chunks: list[Chunk],
-    doc_stats: list[DocumentStats],
+    doc_stats: list[IngestManifestDocument],
     errors: list[str],
 ) -> None:
     save_chunk_results(config, chunks)
@@ -164,28 +166,27 @@ def save_ingest_manifest(
     )
     log.info("Writing ingest manifest to {}", manifest_out_path)
 
-    manifest = {
-        "parameters": {
-            "tokenizer": CHUNK_MODEL,
-            "chunk_size": config.chunk_size,
-            "chunk_overlap": config.chunk_overlap,
-            "strategy": "sections",
-            "min_chunk_tokens": config.min_chunk_tokens,
-            "skip_patterns": config.skip_patterns,
-            "box_pattern": config.box_pattern,
-        },
-        "summary": {
-            "documents": docs,
-            "pages": pages,
-            "chunks": len(chunks),
-            "errors": len(errors),
-        },
-        "documents": doc_stats,
-        "errors": errors,
-    }
+    manifest = IngestManifest(
+        parameters=IngestManifestParameters(
+            tokenizer=CHUNK_MODEL,
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            strategy="sections",
+            min_chunk_tokens=config.min_chunk_tokens,
+            skip_patterns=config.skip_patterns,
+            box_pattern=config.box_pattern,
+        ),
+        summary=IngestManifestSummary(
+            documents=docs,
+            pages=pages,
+            chunks=len(chunks),
+            errors=len(errors),
+        ),
+        documents=doc_stats,
+        errors=errors,
+    )
 
-    with open(manifest_out_path, "w", encoding="utf-8") as manifest_out:
-        json.dump(manifest, manifest_out, indent=2)
+    manifest_out_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 
 
 def save_chunk_results(config: IngestConfig, chunk_result: list[Chunk]) -> None:

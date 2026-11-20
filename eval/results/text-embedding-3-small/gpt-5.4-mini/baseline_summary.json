@@ -1,0 +1,36 @@
+{
+  "configuration": {
+    "answer_model": "gpt-5.4-mini",
+    "embedding_model": "text-embedding-3-small",
+    "top_k": 5,
+    "chunks_sha256": "ae21249ded7290c2c064b6bd6da68358a34681603ae7d06aeb663db3cb04f051",
+    "dataset_sha256": "614fe6981f5594e7fdd8f530121b167b8039887c6ffbc571930af80c024d5669",
+    "prompt_sha256": "905c77411aa7334bd74922a19d0cc708772e69d24ca5a421bd092e626cb41558",
+    "ingest_parameters": {
+      "tokenizer": "text-embedding-3-small",
+      "strategy": "sections",
+      "chunk_size": 600,
+      "chunk_overlap": 90,
+      "min_chunk_tokens": 150,
+      "skip_patterns": [
+        "^(Cross-Chapter Box [\\w.]+, )?(Box [\\w.]+, )?(Figure|Table) [\\w.]+ \\|",
+        "^(Cross-Chapter )?Box [\\w.]+ \\(continued\\)$"
+      ],
+      "box_pattern": "^(Cross-Chapter )?Box [\\w.]+ \\|"
+    },
+    "timestamp": "2026-11-20T15:52:11.026186+09:00",
+    "concurrency": 1
+  },
+  "counts": {
+    "records": 30,
+    "errors": 0,
+    "refusals": 2,
+    "invalid_citation": 0,
+    "answerable": 28,
+    "answerable_citation_hits": 25
+  },
+  "latency_s": {
+    "mean": 2.729388349996104,
+    "max": 4.7039776999736205
+  }
+}

@@ -51,7 +51,7 @@ class Question(BaseModel):
         return self
 
 
-class EvaluationRecord(BaseModel):
+class RetrievalEvaluationRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(description="Question id")
@@ -71,7 +71,7 @@ class RetrievedChunkRecord(BaseModel):
     )
 
 
-class RetrievalSmokeRecord(EvaluationRecord):
+class RetrievalSmokeRecord(RetrievalEvaluationRecord):
     model_config = ConfigDict(extra="forbid")
 
     type: QuestionType
@@ -173,6 +173,48 @@ class Manifest(BaseModel):
     verified: str | None = Field(default=None, description="Verification notes")
 
 
+class IngestManifestParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tokenizer: str
+    chunk_size: int = Field(gt=0)
+    chunk_overlap: int = Field(ge=0)
+    strategy: str
+    min_chunk_tokens: int = Field(ge=0)
+    skip_patterns: list[str]
+    box_pattern: str | None
+
+
+class IngestManifestSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    documents: int = Field(ge=0)
+    pages: int = Field(ge=0)
+    chunks: int = Field(ge=0)
+    errors: int = Field(ge=0)
+
+
+class IngestManifestDocument(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: str
+    source_path: str
+    sha_256: str | None
+    pages: int = Field(ge=0)
+    chunks: int = Field(ge=0)
+    status: str
+    error: str | None
+
+
+class IngestManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parameters: IngestManifestParameters
+    summary: IngestManifestSummary
+    documents: list[IngestManifestDocument]
+    errors: list[str]
+
+
 class LlmAnswer(BaseModel):
     """The LLM's output schema"""
 
@@ -228,3 +270,84 @@ class Answer(BaseModel):
             if citation.chunk_id not in self.retrieved_chunk_ids:
                 raise ValueError("Citation must come from passed `retrieved _chunks_ids`")
         return self
+
+
+class AnswerEvaluationRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="Question id")
+    type: QuestionType = Field(description="Question type (simple, definition, multidocument)")
+    question: str = Field(description="Question text")
+    reference_answer: str = Field(description="Answer used as reference")
+    expected_documents: list[str] = Field(description="Which document contains answer")
+    answer: str | None = Field(default=None, description="Actual LLM Answer")
+    citations: list[Citation] | None = Field(
+        default=None, description="Resolved citations in the answer"
+    )
+    insufficient_evidence: bool | None = Field(
+        default=None, description="Whether there is insufficient evidence"
+    )
+    retrieved_chunk_ids: list[str] | None = Field(
+        default=None,
+        description="All retrieved chunk IDs in ranking order, including uncited chunks",
+    )
+    cites_expected_document: bool | None = Field(
+        default=None, description="Does actual LLM answer cite expected document"
+    )
+    latency_s: float = Field(description="How many seconds it takes LLM to answer the question")
+    error: str | None = Field(default=None, description="Encountered error causing answer failure")
+
+
+class AnswerEvaluationIngestParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tokenizer: str
+    strategy: str
+    chunk_size: int = Field(gt=0)
+    chunk_overlap: int = Field(ge=0)
+    min_chunk_tokens: int = Field(ge=0)
+    skip_patterns: list[str]
+    box_pattern: str | None
+
+
+class AnswerEvaluationConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer_model: str
+    embedding_model: str
+    top_k: int = Field(gt=0)
+    chunks_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    dataset_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    prompt_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    ingest_parameters: AnswerEvaluationIngestParameters
+    timestamp: AwareDatetime = Field(
+        default_factory=lambda: datetime.now().astimezone(),
+        description="Creation time with zone offset",
+    )
+    concurrency: int = Field(gt=0, default=1)
+
+
+class AnswerEvaluationCounts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    records: int = Field(ge=0)
+    errors: int = Field(ge=0)
+    refusals: int = Field(ge=0)
+    invalid_citation: int = Field(ge=0)
+    answerable: int = Field(ge=0)
+    answerable_citation_hits: int = Field(ge=0)
+
+
+class AnswerEvaluationLatency(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mean: float = Field(ge=0)
+    max: float = Field(ge=0)
+
+
+class AnswerEvaluationSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    configuration: AnswerEvaluationConfiguration
+    counts: AnswerEvaluationCounts
+    latency_s: AnswerEvaluationLatency

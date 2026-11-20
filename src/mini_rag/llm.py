@@ -5,9 +5,9 @@ from typing import Protocol, runtime_checkable
 import rich_struct.log
 from openai import AsyncOpenAI
 
-from mini_rag.config import AskConfig, RetrieveConfig
+from mini_rag.config import RetrieveConfig
 from mini_rag.errors import MissingParsedOutputError, NotInitializedError
-from mini_rag.models import Chunk, LlmAnswer, SearchResult
+from mini_rag.models import Chunk, EmbeddingManifest, IngestManifest, LlmAnswer, SearchResult
 from mini_rag.prompts import SYSTEM_PROMPT
 from mini_rag.retrieve import retrieve_from_index_async
 from mini_rag.storage import load_index_async
@@ -19,43 +19,49 @@ logger = rich_struct.log.get_logger()
 class Retriever(Protocol):
     """Retrieves chunks closest to the asked question"""
 
-    async def retrieve_async(
-        self, question: str, top_k: int | None = None
-    ) -> list[SearchResult]: ...
+    ingest_manifest: IngestManifest
+    embedding_manifest: EmbeddingManifest
+
+    async def retrieve_async(self, question: str, top_k: int) -> list[SearchResult]: ...
 
 
 class OpenAIRetriever:
-    def __init__(self, config: AskConfig, client: AsyncOpenAI):
-        self._config = config
+    def __init__(self, index_dir: Path, client: AsyncOpenAI, min_score: float | None = None):
         self._client = client
         self._index_loaded = False
+        self._index_dir = index_dir
+        self._min_score = min_score
 
-    async def load_index(self, chunks_path: Path | None = None):
-        logger.info("Loading index data from {}", self._config.index_dir)
-        self._index, self._chunks, self._manifest = await load_index_async(
-            self._config.index_dir, chunks_path
-        )
+    async def load_index(self, chunks_path: Path | None = None) -> EmbeddingManifest:
+        logger.info("Loading index data from {}", self._index_dir)
+        (
+            self._index,
+            self._chunks,
+            self.ingest_manifest,
+            self.embedding_manifest,
+        ) = await load_index_async(self._index_dir, chunks_path)
         self._index_loaded = True
+        return self.embedding_manifest
 
-    async def retrieve_async(self, question: str, top_k: int | None = None) -> list[SearchResult]:
+    async def retrieve_async(self, question: str, top_k: int) -> list[SearchResult]:
         if not self._index_loaded:
             raise NotInitializedError("Retriever must load its index data before it can be used")
 
-        retrieve_config = RetrieveConfig(
-            question=question, top_k=top_k or self._config.top_k, index_dir=self._config.index_dir
-        )
+        retrieve_config = RetrieveConfig(question=question, top_k=top_k, index_dir=self._index_dir)
 
         results = await retrieve_from_index_async(
-            retrieve_config, self._client, self._index, self._manifest, self._chunks
+            retrieve_config, self._client, self._index, self.embedding_manifest, self._chunks
         )
-        if self._config.min_score is None:
+        if self._min_score is None:
             return results
-        return [result for result in results if result.score >= self._config.min_score]
+        return [result for result in results if result.score >= self._min_score]
 
 
 @runtime_checkable
 class AnswerGenerator(Protocol):
     """Structural interface for anything that can generate an answer."""
+
+    model_name: str
 
     async def generate_async(
         self, question: str, context: tuple[str, dict[int, Chunk]]
@@ -65,12 +71,12 @@ class AnswerGenerator(Protocol):
 class OpenAIAnswerGenerator:
     def __init__(self, client: AsyncOpenAI, model_name: str):
         self._client = client
-        self._model_name = model_name
+        self.model_name = model_name
 
     async def generate_async(
         self, question: str, context: tuple[str, dict[int, Chunk]]
     ) -> LlmAnswer:
-        logger.info("Quering OpenAI's model '{}'", self._model_name)
+        logger.info("Quering OpenAI's model '{}'", self.model_name)
 
         user_content = f"""
 User question is below (wrapped by tripple ```)
@@ -86,7 +92,7 @@ Data fragments, your all knowledge base is below (wrapped by tripple ```):
 
         start_time = perf_counter()
         response = await self._client.responses.parse(
-            model=self._model_name,
+            model=self.model_name,
             input=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_content},
@@ -99,7 +105,7 @@ Data fragments, your all knowledge base is below (wrapped by tripple ```):
         logger.info(
             "OpenAI model '{}' responded in {:.2f} seconds "
             "(input_tokens: {}, output_tokens: {}, total_tokens: {}) [Response: {}]",
-            self._model_name,
+            self.model_name,
             latency,
             usage.input_tokens if usage else None,
             usage.output_tokens if usage else None,
@@ -124,7 +130,7 @@ Data fragments, your all knowledge base is below (wrapped by tripple ```):
             response.incomplete_details.reason if response.incomplete_details else None
         )
         raise MissingParsedOutputError(
-            model=self._model_name,
+            model=self.model_name,
             response_id=response.id,
             status=response.status,
             refusal=refusal,

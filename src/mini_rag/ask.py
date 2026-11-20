@@ -94,9 +94,9 @@ def resolve_citations(llm_answer: LlmAnswer, ref_map: dict[int, Chunk]) -> Resol
 
 
 async def ask_async(
-    question: str, retriever: Retriever, generator: AnswerGenerator, top_k: int | None = None
+    question: str, retriever: Retriever, generator: AnswerGenerator, top_k: int
 ) -> Answer:
-    logger.info("Retrieving closest semanticly chunks for user question")
+    logger.info("Retrieving closest semanticly chunks for user question: {}", question)
     search_results = await retriever.retrieve_async(question, top_k)
     if not search_results:
         logger.info("No chunks retrieved; refusing without calling the answer model")
@@ -166,7 +166,7 @@ async def _run_async(argv: Sequence[str] | None = None) -> None:
     rich_struct.log.configure(console=False, file=config.log_folder)
 
     async with AsyncOpenAI() as client:
-        retriever = OpenAIRetriever(config, client)
+        retriever = OpenAIRetriever(config.index_dir, client, config.min_score)
         await retriever.load_index()
 
         generator = OpenAIAnswerGenerator(client, config.answer_model)

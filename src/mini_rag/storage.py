@@ -1,4 +1,3 @@
-import hashlib
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Final, NamedTuple
@@ -17,7 +16,9 @@ from mini_rag.errors import (
     IndexAndChunksNotSyncError,
     StaleIndexError,
 )
-from mini_rag.models import Chunk, EmbeddingManifest
+from mini_rag.hashing import calculate_file_sha
+from mini_rag.ingest import load_ingest_manifest
+from mini_rag.models import Chunk, EmbeddingManifest, IngestManifest
 
 EMBEDDINGS_FILENAME: Final[str] = "embeddings.npy"
 EMBEDDINGS_MANIFEST_FILENAME: Final[str] = "embedding_manifest.json"
@@ -28,7 +29,8 @@ logger = rich_struct.log.get_logger()
 class LoadedIndex(NamedTuple):
     embeddings_matrix: NDArray[np.float32]
     chunks: Sequence[Chunk]
-    manifest: EmbeddingManifest
+    ingest_manifest: IngestManifest
+    embedding_manifest: EmbeddingManifest
 
 
 async def load_embedding_manifest_async(index_dir: Path) -> EmbeddingManifest:
@@ -50,16 +52,21 @@ async def try_load_embeddings_and_manifest_async(
 
 
 async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> LoadedIndex:
-    embeddings, manifest = await load_embeddings_and_manifest_async(index_dir, chunks_path)
+    embeddings, embedding_manifest = await load_embeddings_and_manifest_async(
+        index_dir, chunks_path
+    )
 
-    chunks_path = chunks_path or manifest.chunks_path
+    chunks_path = chunks_path or embedding_manifest.chunks_path
     chunks = await read_chunk_list_async(chunks_path)
     if embeddings.shape[0] != len(chunks):
         raise IndexAndChunksNotSyncError(
             f"Index has {embeddings.shape[0]} rows, but chunks have {len(chunks)} records"
         )
 
-    return LoadedIndex(embeddings, chunks, manifest)
+    ingest_manifest_name = f"ingest_manifest{chunks_path.stem.removeprefix('chunks')}.json"
+    ingest_manifest = load_ingest_manifest(chunks_path.with_name(ingest_manifest_name))
+
+    return LoadedIndex(embeddings, chunks, ingest_manifest, embedding_manifest)
 
 
 async def load_embeddings_and_manifest_async(
@@ -134,13 +141,3 @@ async def read_chunks_async(path: Path) -> AsyncIterator[Chunk]:
 
 async def read_chunk_list_async(path: Path) -> list[Chunk]:
     return [chunk async for chunk in read_chunks_async(path)]
-
-
-def calculate_file_sha(path: Path) -> str:
-    digest = hashlib.sha256()
-
-    with path.open("rb") as file:
-        while block := file.read(1024 * 1024):
-            digest.update(block)
-
-    return digest.hexdigest()

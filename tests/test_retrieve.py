@@ -9,7 +9,14 @@ from numpy.typing import NDArray
 
 from mini_rag.config import RetrieveConfig, load_config
 from mini_rag.errors import DimensionMismatchError, StaleIndexError
-from mini_rag.models import Chunk, EmbeddingManifest, SearchResult
+from mini_rag.models import (
+    Chunk,
+    EmbeddingManifest,
+    IngestManifest,
+    IngestManifestParameters,
+    IngestManifestSummary,
+    SearchResult,
+)
 from mini_rag.retrieve import main, preview, retrieve_async, search
 from mini_rag.storage import calculate_file_sha, load_index_async, save_index
 
@@ -172,12 +179,34 @@ def write_chunks(path: Path, chunks: list[Chunk]) -> None:
     path.write_text("".join(chunk.model_dump_json() + "\n" for chunk in chunks), encoding="utf-8")
 
 
+def write_ingest_manifest(chunks_path: Path) -> None:
+    manifest = IngestManifest(
+        parameters=IngestManifestParameters(
+            tokenizer="test",
+            chunk_size=600,
+            chunk_overlap=90,
+            strategy="sections",
+            min_chunk_tokens=0,
+            skip_patterns=[],
+            box_pattern=None,
+        ),
+        summary=IngestManifestSummary(documents=0, pages=0, chunks=0, errors=0),
+        documents=[],
+        errors=[],
+    )
+    manifest_path = chunks_path.with_name(
+        f"ingest_manifest{chunks_path.stem.removeprefix('chunks')}.json"
+    )
+    manifest_path.write_text(manifest.model_dump_json(), encoding="utf-8")
+
+
 @pytest.fixture
 def mini_index(tmp_path: Path) -> tuple[Path, Path, list[Chunk]]:
     """Two chunks, a normalized 2 x 2 matrix and a manifest with a valid hash."""
     chunks = [make_chunk("a"), make_chunk("b")]
-    chunks_path = tmp_path / "chunks.jsonl"
+    chunks_path = tmp_path / "chunks_600_90.jsonl"
     write_chunks(chunks_path, chunks)
+    write_ingest_manifest(chunks_path)
     matrix = np.eye(2, dtype=np.float32)
     manifest = EmbeddingManifest(
         model="index-model",
@@ -196,7 +225,7 @@ async def test_load_index_happy_path(
 ) -> None:
     index_dir, chunks_path, chunks = mini_index
 
-    matrix, loaded_chunks, manifest = await load_index_async(index_dir, chunks_path)
+    matrix, loaded_chunks, _, manifest = await load_index_async(index_dir, chunks_path)
 
     assert matrix.shape == (2, 2)
     assert matrix.dtype == np.float32
@@ -211,7 +240,7 @@ async def test_load_index_defaults_to_chunks_path_from_manifest(
 ) -> None:
     index_dir, _, chunks = mini_index
 
-    _, loaded_chunks, _ = await load_index_async(index_dir, None)
+    _, loaded_chunks, _, _ = await load_index_async(index_dir, None)
 
     assert loaded_chunks == chunks
 

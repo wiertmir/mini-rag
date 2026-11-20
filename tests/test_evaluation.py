@@ -9,7 +9,16 @@ import pytest
 from pydantic import ValidationError
 
 from mini_rag.evaluation import is_hit, summarize_evaluation
-from mini_rag.models import Chunk, EmbeddingManifest, EvaluationRecord, Question
+from mini_rag.models import (
+    Chunk,
+    EmbeddingManifest,
+    IngestManifest,
+    IngestManifestDocument,
+    IngestManifestParameters,
+    IngestManifestSummary,
+    Question,
+    RetrievalEvaluationRecord,
+)
 from mini_rag.storage import calculate_file_sha, save_index
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,9 +45,9 @@ def test_is_hit_is_none_for_unanswerable_question() -> None:
 
 def test_summarize_evaluation_counts_answerable_hits_and_misses() -> None:
     records = [
-        EvaluationRecord(id="Q1", hit=True),
-        EvaluationRecord(id="Q2", hit=False),
-        EvaluationRecord(id="Q3", hit=None),
+        RetrievalEvaluationRecord(id="Q1", hit=True),
+        RetrievalEvaluationRecord(id="Q2", hit=False),
+        RetrievalEvaluationRecord(id="Q3", hit=None),
     ]
 
     assert summarize_evaluation(records) == (2, 1, ["Q2"])
@@ -146,10 +155,38 @@ class FakeClient:
 
 async def run_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, FakeClient]:
     """Hand-built run: Q1 hit, Q2 miss, Q3 unanswerable; top_k = 1."""
-    chunks_path = tmp_path / "chunks.jsonl"
+    chunks_path = tmp_path / "chunks_600_90.jsonl"
     chunks_path.write_text(
         "".join(make_chunk(doc).model_dump_json() + "\n" for doc in ("A", "B")),
         encoding="utf-8",
+    )
+    ingest_manifest = IngestManifest(
+        parameters=IngestManifestParameters(
+            tokenizer="test",
+            chunk_size=600,
+            chunk_overlap=90,
+            strategy="sections",
+            min_chunk_tokens=0,
+            skip_patterns=[],
+            box_pattern=None,
+        ),
+        summary=IngestManifestSummary(documents=2, pages=0, chunks=2, errors=0),
+        documents=[
+            IngestManifestDocument(
+                document_id=doc,
+                source_path=f"{doc}.pdf",
+                sha_256=None,
+                pages=0,
+                chunks=1,
+                status="ok",
+                error=None,
+            )
+            for doc in ("A", "B")
+        ],
+        errors=[],
+    )
+    (tmp_path / "ingest_manifest_600_90.json").write_text(
+        ingest_manifest.model_dump_json(), encoding="utf-8"
     )
     index_dir = tmp_path / "index"
     save_index(

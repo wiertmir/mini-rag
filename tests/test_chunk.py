@@ -483,4 +483,4 @@ def test_process_document_uses_real_page_numbers_and_page_ranges(
         ("doc_p001_c001", 1, 3),
         ("doc_p003_c001", 3, 3),
     ]
-    assert stats["chunks"] == 2
+    assert stats.chunks == 2

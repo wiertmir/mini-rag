@@ -33,6 +33,7 @@ from mini_rag.pages import PageRange, parse_page_ranges
 
 CONFIG_FILE_ENV_VAR: Final[str] = "MINI_RAG_CONFIG"
 DEFAULT_EMBEDDING_MODEL: Final[str] = "text-embedding-3-small"
+DEFAULT_LLM_MODEL: Final[str] = "gpt-5.4-mini"
 
 
 class HelpFormatter(RichHelpFormatter):
@@ -177,7 +178,9 @@ class AskConfig(Config):
     model_config = SettingsConfigDict(toml_table_header=("ask",))
 
     question: CliPositionalArg[str] = Field(description="user question")
-    answer_model: str = Field(default="gpt-5.4-mini", description="Model that generates the answer")
+    answer_model: str = Field(
+        default=DEFAULT_LLM_MODEL, description="Model that generates the answer"
+    )
     top_k: int = Field(default=5, ge=1, description="How many fragments go into the context")
     min_score: float | None = Field(
         default=None,

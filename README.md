@@ -513,3 +513,42 @@ python -m mini_rag.ask "What is climate mitigation?" --json-output \
 
 The implicit boolean flag also follows normal configuration precedence via
 `JSON_OUTPUT` or `json_output` in `[ask]`.
+
+### End-to-end answer baseline (#19)
+
+`eval/run_baseline.py` evaluates the full answer path sequentially, reusing one
+loaded index and SDK client. It writes one Pydantic record per question to
+`baseline.jsonl`, followed by `baseline_summary.json` containing configuration,
+input/prompt fingerprints, counts, and latency statistics.
+
+```bash
+python eval/run_baseline.py --questions data/questions.jsonl \
+  --index-dir index/text-embedding-3-small \
+  --model gpt-5.4-mini \
+  --output-dir eval/results/text-embedding-3-small/gpt-5.4-mini
+```
+
+This is a paid live run with the default OpenAI client: 30 answer attempts plus
+query embeddings; do not rerun it merely to inspect the committed results.
+The CLI uses `--output-dir`, not the earlier card example's `--output`.
+
+The committed run contains 30 records, 25/28 answerable citation hits, two
+refusals (Q29/Q30), zero execution errors and zero invalid citations. A citation
+hit means at least one expected document was cited, not that answer correctness
+has been independently graded. Errors use null answer fields and null
+`cites_expected_document`; failed answerable questions remain in the denominator.
+Errors and refusals are disjoint; latency includes every attempted question.
+
+The saved dataset fingerprint matches CRLF encoding of the checked-in LF
+question file; the record contents and labels match. Compare exact hashes only
+when the file bytes, including line endings, are identical. The saved prompt and ingest parameters match the current prompt and local
+manifest. All 68 citation document IDs and page ranges match the local chunks.
+The baseline chunk fingerprint differs from the current local index; the exact
+historical retrieval context cannot be reproduced from this local index alone.
+These checks made no API calls.
+
+**Review status:** changes requested. Offline regression checks expose silent
+overwriting of an existing baseline and exception labels formatted as
+`<class 'RuntimeError'>` instead of `RuntimeError`, plus `--local-ollama False` incorrectly selecting
+the local endpoint. Until overwrite protection
+is added, use a fresh output directory to preserve the reference artifacts.

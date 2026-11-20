@@ -66,8 +66,8 @@ in **all seven runs**. There is one execution error across 210 records.
 ### What I would choose
 
 - **Local default: Gemma 4 12B Q8 / 8K.** 25/28 with both embedding sizes.
-  Within each embedding setup, observed mean latency is about 2.26× (4B) or
-  2.67× (8B) lower than Gemma 31B. This is practical evidence on this machine,
+  Within each embedding setup, Gemma 31B has about 2.26× (4B) or
+  2.67× (8B) the observed mean latency of Gemma 12B. This is practical evidence on this machine,
   not proof of equal semantic quality or universal model-speed superiority.
 - **Gemma 31B is not justified here:** more memory/time, 25/28 or 22/28,
   without demonstrated improvement over 12B.
@@ -198,7 +198,43 @@ is a separate, weaker check than factual support.
 
 ## 8. Week-1 reproducibility and quality audit
 
-AUDIT_PENDING
+**Verdict: passed for week-1 scope, with nonblocking follow-ups #75–#78.**
+This is not production-readiness certification or a claim that every answer is correct.
+
+- Repository was clean at audit start; review used an isolated PR worktree and the
+  pinned Python 3.13.15. Required Day-1 layout is present.
+- All 20 manifest-listed PDFs are readable. No corpus download was required.
+- No .env/index/PDF/log artifacts are tracked; the example key is a placeholder.
+  The requested broad key-pattern scan has one false positive in a historical
+  merge header (the branch slug contains “ask-function-and-cli-command”).
+  Patch-only scanning has **zero candidate matches**; inspection found no key
+  behind that header hit. Do not treat a merge-title regex hit as a leaked secret.
+- Full-corpus ingest ran twice with the stored section/tokenizer/minimum/caption/box
+  settings into /tmp/pr74-week/run1 and run2. Both produced **6,264 chunks** and
+  byte-identical SHA-256 **6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414**,
+  also identical to the existing indexed chunk file. Existing index artifacts were
+  not overwritten. Run durations: 334.45 s and 333.42 s.
+- Validated index row/chunk/manifest counts, dimensions, hashes and ingest parameters:
+  OpenAI **(6264, 1536)**, Qwen 4B **(6264, 2560)**, Qwen 8B **(6264, 4096)**.
+  Real-row self-query top scores are approximately 1 for all three.
+- Offline suite with no API key and closed endpoint: **313 passed, 2 live deselected**.
+  Evaluation tests: **38 passed**. Ruff lint/format and mypy source + modified tests
+  pass; imports resolve to the isolated PR checkout.
+- Expanded committed-artifact regression coverage from one answer run to all seven;
+  smoke tests also recompute hits against current question labels. No learner
+  implementation or saved results were changed by this review.
+- GitHub [Acceptance run 44738489501](https://github.com/wiertmir/mini-rag/actions/runs/44738489501):
+  **6 passed, 0 skipped**, on experiment commit 9c8e117. Corpus completeness was
+  verified. It covers traceable metadata, determinism, both chunking strategies,
+  overlap, missing PDFs and empty pages. Later review commits change only tests/docs.
+- Ten baseline answers and all local misses reviewed; five selected PDF claims
+  supported; all seven Q29/Q30 pairs refuse with no invented earnings/population.
+- README commands remain the reproduction runbook. Review reused existing
+  embeddings and saved answers; **no generation/query-embedding API calls or
+  document re-embedding** were used. Temporary ingest was the deliberate milestone
+  determinism check, not a replacement of the accepted corpus.
+- Final PR CI and merge status are recorded in the PR / week-review issue.
+  The remaining findings are explicit follow-ups, not hidden baseline changes.
 
 ## 9. Follow-up priorities without moving the baseline
 

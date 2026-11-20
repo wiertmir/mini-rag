@@ -120,7 +120,7 @@ mypy src
 pytest -q
 ```
 
-Expected at the #20 refresh: **307 passed, 2 deselected**. No external services
+Expected at the PR #74 refresh: **313 passed, 2 deselected**. No external services
 or API credentials are required. The two deselected tests are the paid generator
 checks. Opt in only with the prepared local index and an exported key:
 
@@ -360,13 +360,12 @@ has been independently graded. Errors use null answer fields and null
 `cites_expected_document`; failed answerable questions remain in the denominator.
 Errors and refusals are disjoint; latency includes every attempted question.
 
-The saved dataset fingerprint matches CRLF encoding of the checked-in LF
-question file; the record contents and labels match. Compare exact hashes only
-when the file bytes, including line endings, are identical. The saved prompt
-and ingest parameters match the current prompt and local manifest. All 68 citation document IDs and page ranges match the local chunks.
-The baseline chunk fingerprint differs from the current local index; the exact
-historical retrieval context cannot be reproduced from this local index alone.
-These checks made no API calls.
+The current saved OpenAI run in PR #74 matches the current dataset, prompt and
+local chunk fingerprints. Its 72 citation document/page ranges match the local
+chunks. This is a new run, not a retroactive correction of the historical PR #72
+artifact. Seven answer runs (210 records) are analyzed in
+[evaluation_results.md](evaluation_results.md), including metric limitations,
+local-model trade-offs, source checks and follow-up issues.
 
 **Review status:** approved after re-review of `4b0ffdd`. Both output files are
 protected against accidental overwrites; pass `--force` to deliberately replace
@@ -374,10 +373,10 @@ them. An old summary is removed before an authorized replacement run, so an
 interruption cannot leave a stale completion marker. Generic errors store the
 exception class name. `--local-ollama` is a presence flag: omit it for OpenAI;
 `--local-ollama False` is rejected rather than selecting the wrong endpoint.
-Offline verification: 307 tests passed, 2 live tests deselected; the evaluation
-module has 32 passing cases, including force/interrupt/CLI regressions. The
-historical-index fingerprint limitation above remains, not a claim of exact
-retrieval reproduction.
+Latest offline verification: 313 tests passed, 2 live tests deselected; the
+evaluation module has 38 passing cases, including force/interrupt/CLI regressions.
+The saved PR #74 run now matches the validated local index; historical results
+remain versioned in Git.
 
 ## Structured answer generation (Python component)
 
@@ -555,11 +554,11 @@ After validating references against the numbered context, the system returns:
 
 ### Local embedding experiments (Ollama)
 
-The `embed_qwen3-embedding_4b.ipynb` and `embed_qwen3-embedding_8b.ipynb`
+The `embed_qwen3-embedding:4b.ipynb` and `embed_qwen3-embedding:8b.ipynb`
 notebooks inject an `AsyncOpenAI` client pointing to `http://localhost:11434/v1`
 with the local placeholder key `ollama`. Pull the matching model in Ollama first.
 They share `index/chunks_600_90.jsonl` but write separate model indexes under
-`index/qwen3-embedding_4b` and `index/qwen3-embedding_8b`.
+`index/qwen3-embedding:4b` and `index/qwen3-embedding:8b`.
 The matching `eval_*.ipynb` notebooks write results under `eval/results/<model>`.
 The OpenAI notebooks still require your private OpenAI API key.
 

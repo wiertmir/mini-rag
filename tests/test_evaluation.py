@@ -716,3 +716,104 @@ async def test_baseline_cli_false_does_not_select_local_endpoint(
         assert not client_options
         return
     assert client_options == [{}]
+
+
+async def test_baseline_force_replaces_both_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from mini_rag import evaluation
+
+    questions = tmp_path / "questions.jsonl"
+    questions.write_text(json.dumps(question_dict()) + "\n", encoding="utf-8")
+    output = tmp_path / "out"
+    output.mkdir()
+    for name in ("baseline.jsonl", "baseline_summary.json"):
+        (output / name).write_text("old reference", encoding="utf-8")
+    ask = AsyncMock(return_value=baseline_answer())
+    monkeypatch.setattr(evaluation, "ask_async", ask)
+    await evaluation.baseline_evaluation_loop(
+        questions,
+        output,
+        *baseline_dependencies(),
+        2,
+        True,
+    )
+    ask.assert_awaited_once()
+    records = (output / "baseline.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(records) == 1
+    assert json.loads(records[0])["id"] == "Q01"
+    assert (
+        json.loads((output / "baseline_summary.json").read_text(encoding="utf-8"))["counts"][
+            "records"
+        ]
+        == 1
+    )
+
+
+async def test_baseline_force_removes_old_summary_before_interrupted_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from mini_rag import evaluation
+
+    questions = tmp_path / "questions.jsonl"
+    questions.write_text(json.dumps(question_dict()) + "\n", encoding="utf-8")
+    output = tmp_path / "out"
+    output.mkdir()
+    summary = output / "baseline_summary.json"
+    summary.write_text("old completed run", encoding="utf-8")
+    monkeypatch.setattr(evaluation, "ask_async", AsyncMock(side_effect=asyncio.CancelledError))
+    with pytest.raises(asyncio.CancelledError):
+        await evaluation.baseline_evaluation_loop(
+            questions,
+            output,
+            *baseline_dependencies(),
+            2,
+            True,
+        )
+    assert not summary.exists()
+
+
+async def test_baseline_cli_passes_force_and_selects_local_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    spec = importlib.util.spec_from_file_location(
+        "baseline_force_cli", REPO_ROOT / "eval/run_baseline.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    options: list[dict[str, Any]] = []
+
+    def make_client(**kwargs: Any) -> FakeClient:
+        options.append(kwargs)
+        return FakeClient()
+
+    retriever, _ = baseline_dependencies()
+    retriever.load_index = AsyncMock(return_value=retriever.embedding_manifest)
+    evaluator = AsyncMock()
+    monkeypatch.setattr(module, "AsyncOpenAI", make_client)
+    monkeypatch.setattr(module, "OpenAIRetriever", lambda *_: retriever)
+    monkeypatch.setattr(module, "baseline_evaluation_loop", evaluator)
+    await module._run_async(
+        [
+            "--questions",
+            str(tmp_path / "questions.jsonl"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--local-ollama",
+            "--force",
+        ]
+    )
+    assert options == [{"base_url": "http://localhost:11434/v1", "api_key": "ollama"}]
+    assert evaluator.await_args is not None
+    assert evaluator.await_args.args[-1] is True

@@ -541,14 +541,19 @@ Errors and refusals are disjoint; latency includes every attempted question.
 
 The saved dataset fingerprint matches CRLF encoding of the checked-in LF
 question file; the record contents and labels match. Compare exact hashes only
-when the file bytes, including line endings, are identical. The saved prompt and ingest parameters match the current prompt and local
-manifest. All 68 citation document IDs and page ranges match the local chunks.
+when the file bytes, including line endings, are identical. The saved prompt
+and ingest parameters match the current prompt and local manifest. All 68 citation document IDs and page ranges match the local chunks.
 The baseline chunk fingerprint differs from the current local index; the exact
 historical retrieval context cannot be reproduced from this local index alone.
 These checks made no API calls.
 
-**Review status:** changes requested. Offline regression checks expose silent
-overwriting of an existing baseline and exception labels formatted as
-`<class 'RuntimeError'>` instead of `RuntimeError`, plus `--local-ollama False` incorrectly selecting
-the local endpoint. Until overwrite protection
-is added, use a fresh output directory to preserve the reference artifacts.
+**Review status:** approved after re-review of `4b0ffdd`. Both output files are
+protected against accidental overwrites; pass `--force` to deliberately replace
+them. An old summary is removed before an authorized replacement run, so an
+interruption cannot leave a stale completion marker. Generic errors store the
+exception class name. `--local-ollama` is a presence flag: omit it for OpenAI;
+`--local-ollama False` is rejected rather than selecting the wrong endpoint.
+Offline verification: 307 tests passed, 2 live tests deselected; the evaluation
+module has 32 passing cases, including force/interrupt/CLI regressions. The
+historical-index fingerprint limitation above remains, not a claim of exact
+retrieval reproduction.

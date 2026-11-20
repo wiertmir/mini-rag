@@ -98,7 +98,7 @@ async def embed_texts_async(
         batch_seq = batch_no
         total_texts += len(batch)
         logger.info(
-            "Calling OpenAI embeddings (model={}) with {} strings [Batch: {}]",
+            "Calling AI embeddings (model={}) with {} strings [Batch: {}]",
             model,
             len(batch),
             batch_seq,
@@ -107,7 +107,7 @@ async def embed_texts_async(
 
         total_tokens += response.usage.total_tokens
         logger.debug(
-            "OpenAI returned {} embeddings (total_tokens: {}) [Batch: {}]",
+            "AI returned {} embeddings (total_tokens: {}) [Batch: {}]",
             len(response.data),
             response.usage.total_tokens,
             batch_seq,

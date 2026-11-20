@@ -76,7 +76,7 @@ class OpenAIAnswerGenerator:
     async def generate_async(
         self, question: str, context: tuple[str, dict[int, Chunk]]
     ) -> LlmAnswer:
-        logger.info("Quering OpenAI's model '{}'", self.model_name)
+        logger.info("Quering AI model '{}'", self.model_name)
 
         user_content = f"""
 User question is below (wrapped by tripple ```)
@@ -103,7 +103,7 @@ Data fragments, your all knowledge base is below (wrapped by tripple ```):
 
         usage = response.usage
         logger.info(
-            "OpenAI model '{}' responded in {:.2f} seconds "
+            "AI model '{}' responded in {:.2f} seconds "
             "(input_tokens: {}, output_tokens: {}, total_tokens: {}) [Response: {}]",
             self.model_name,
             latency,

@@ -311,8 +311,8 @@ async def test_smoke_cli_owns_client_and_passes_custom_paths(
 @pytest.mark.parametrize(
     "model_dir",
     [
-        "qwen3-embedding_4b",
-        "qwen3-embedding_8b",
+        "qwen3-embedding:4b",
+        "qwen3-embedding:8b",
         "text-embedding-3-small",
     ],
 )

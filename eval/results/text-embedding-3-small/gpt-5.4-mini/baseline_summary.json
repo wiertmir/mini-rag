@@ -3,8 +3,8 @@
     "answer_model": "gpt-5.4-mini",
     "embedding_model": "text-embedding-3-small",
     "top_k": 5,
-    "chunks_sha256": "ae21249ded7290c2c064b6bd6da68358a34681603ae7d06aeb663db3cb04f051",
-    "dataset_sha256": "614fe6981f5594e7fdd8f530121b167b8039887c6ffbc571930af80c024d5669",
+    "chunks_sha256": "6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414",
+    "dataset_sha256": "268f7b1440c1ac549a0c77d663cb0758452208ecfbe3259b584d058c2e679427",
     "prompt_sha256": "905c77411aa7334bd74922a19d0cc708772e69d24ca5a421bd092e626cb41558",
     "ingest_parameters": {
       "tokenizer": "text-embedding-3-small",
@@ -18,7 +18,7 @@
       ],
       "box_pattern": "^(Cross-Chapter )?Box [\\w.]+ \\|"
     },
-    "timestamp": "2026-11-20T15:52:11.026186+09:00",
+    "timestamp": "2026-11-20T17:40:34.335278+09:00",
     "concurrency": 1
   },
   "counts": {
@@ -30,7 +30,7 @@
     "answerable_citation_hits": 25
   },
   "latency_s": {
-    "mean": 2.729388349996104,
-    "max": 4.7039776999736205
+    "mean": 2.6580752975341357,
+    "max": 4.188884647999657
   }
 }

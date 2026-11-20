@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -11,7 +13,7 @@ def chunk() -> Chunk:
         document_id="sample",
         title="Sample",
         collection="test",
-        source_path="sample.pdf",
+        source_path=Path("sample.pdf"),
         source_url="https://example.test/sample.pdf",
         page=1,
         page_end=1,

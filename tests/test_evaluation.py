@@ -139,7 +139,7 @@ class FakeClient:
     async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, *exc: object) -> None:
+    async def __aexit__(self, *_: object) -> None:
         return None
 
     async def create(self, *, model: str, input: tuple[str, ...]) -> SimpleNamespace:
@@ -398,7 +398,9 @@ async def run_fake_baseline(
     ask = AsyncMock(side_effect=outcomes)
     monkeypatch.setattr(evaluation, "ask_async", ask)
     retriever, generator = baseline_dependencies()
-    await evaluation.evaluation_loop(source, tmp_path / "out", retriever, generator, 2)
+    await evaluation.baseline_evaluation_loop(
+        source, tmp_path / "out", retriever, generator, 2, False
+    )
     records = [
         json.loads(line) for line in (tmp_path / "out/baseline.jsonl").read_text().splitlines()
     ]
@@ -512,7 +514,9 @@ async def test_baseline_preserves_existing_reference_without_explicit_overwrite(
     ask = AsyncMock(return_value=baseline_answer())
     monkeypatch.setattr(evaluation, "ask_async", ask)
     try:
-        await evaluation.evaluation_loop(questions, output, *baseline_dependencies(), 2)
+        await evaluation.baseline_evaluation_loop(
+            questions, output, *baseline_dependencies(), 2, False
+        )
     except (FileExistsError, ValueError):
         pass
     assert reference.read_text() == "existing reference\n"
@@ -529,14 +533,14 @@ def test_committed_answer_baseline_matches_dataset_summary_and_prompt() -> None:
     directory = REPO_ROOT / "eval/results/text-embedding-3-small/gpt-5.4-mini"
     records = [
         AnswerEvaluationRecord.model_validate_json(line)
-        for line in (directory / "baseline.jsonl").read_text().splitlines()
+        for line in (directory / "baseline.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     summary = AnswerEvaluationSummary.model_validate_json(
-        (directory / "baseline_summary.json").read_text()
+        (directory / "baseline_summary.json").read_text(encoding="utf-8")
     )
     questions = [
         Question.model_validate_json(line)
-        for line in (REPO_ROOT / "data/questions.jsonl").read_text().splitlines()
+        for line in (REPO_ROOT / "data/questions.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert len(records) == 30
     assert [r.id for r in records] == [q.id for q in questions]
@@ -658,7 +662,7 @@ async def test_baseline_cli_missing_index_aborts_before_question_loop(
     spec.loader.exec_module(module)
     evaluator = AsyncMock()
     monkeypatch.setattr(module, "AsyncOpenAI", FakeClient)
-    monkeypatch.setattr(module, "evaluation_loop", evaluator)
+    monkeypatch.setattr(module, "baseline_evaluation_loop", evaluator)
     with pytest.raises(FileNotFoundError):
         await module._run_async(
             [
@@ -696,7 +700,7 @@ async def test_baseline_cli_false_does_not_select_local_endpoint(
     retriever.load_index = AsyncMock(return_value=retriever.embedding_manifest)
     monkeypatch.setattr(module, "AsyncOpenAI", make_client)
     monkeypatch.setattr(module, "OpenAIRetriever", lambda *_: retriever)
-    monkeypatch.setattr(module, "evaluation_loop", AsyncMock())
+    monkeypatch.setattr(module, "baseline_evaluation_loop", AsyncMock())
     # Rejecting a value is also fine if the CLI changes to a bare boolean flag.
     try:
         await module._run_async(

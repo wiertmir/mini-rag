@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 import pytest
 
@@ -17,7 +18,7 @@ def results() -> list[SearchResult]:
                 document_id=f"doc{index}",
                 title=f"Distinct title {index}",
                 collection="test",
-                source_path=f"doc{index}.pdf",
+                source_path=Path(f"doc{index}.pdf"),
                 source_url=f"https://example.test/doc{index}.pdf",
                 page=page,
                 page_end=end,

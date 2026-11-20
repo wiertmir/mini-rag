@@ -17,9 +17,10 @@ def test_save_ingest_manifest_writes_both_files_for_each_configuration(
         document_id="sample",
         title="Sample",
         collection="test",
-        source_path="sample.pdf",
+        source_path=Path("sample.pdf"),
         source_url="https://example.test/sample.pdf",
         page=1,
+        page_end=1,
         text="Sample text",
         token_count=2,
     )

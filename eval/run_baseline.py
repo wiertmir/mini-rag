@@ -7,7 +7,7 @@ import rich_struct.log
 from openai import AsyncOpenAI, OpenAIError
 
 from mini_rag.config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL
-from mini_rag.evaluation import evaluation_loop
+from mini_rag.evaluation import baseline_evaluation_loop
 from mini_rag.helpers import ErrorHandler
 from mini_rag.llm import OpenAIAnswerGenerator, OpenAIRetriever
 
@@ -34,8 +34,7 @@ async def _run_async(argv: Sequence[str] | None = None):
     )
     parser.add_argument(
         "--local-ollama",
-        type=bool,
-        default=False,
+        action="store_true",
         help="If true everything runs on local ollama service",
     )
     parser.add_argument(
@@ -46,6 +45,9 @@ async def _run_async(argv: Sequence[str] | None = None):
         type=int,
         default=5,
         help="How many search results use to in question context",
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="If set, existing output will be overwritten"
     )
     args = parser.parse_args(argv)
 
@@ -83,7 +85,9 @@ async def _run_async(argv: Sequence[str] | None = None):
                 output_dir,
             )
 
-        await evaluation_loop(questions_path, output_dir, retriever, generator, args.top_k)
+        await baseline_evaluation_loop(
+            questions_path, output_dir, retriever, generator, args.top_k, args.force
+        )
 
 
 def main(argv: Sequence[str] | None = None):

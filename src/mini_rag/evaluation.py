@@ -8,6 +8,7 @@ import aiofiles
 import rich_struct.log
 
 from mini_rag.ask import InvalidCitationError, ask_async
+from mini_rag.errors import OutputAlreadyExists
 from mini_rag.hashing import calculate_file_sha, calculate_text_sha
 from mini_rag.llm import AnswerGenerator, Retriever
 from mini_rag.models import (
@@ -65,12 +66,13 @@ def summarize_evaluation(
     return answerable_count, hit_count, missed_ids
 
 
-async def evaluation_loop(
+async def baseline_evaluation_loop(
     questions_path: Path,
     output_dir: Path,
     retriever: Retriever,
     answer_generator: AnswerGenerator,
     top_k: int,
+    force_overwrite: bool,
 ):
     logger.info("Loading questions from {}", questions_path)
     questions = load_questions_async(questions_path)
@@ -78,6 +80,15 @@ async def evaluation_loop(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     record_file_path = output_dir / "baseline.jsonl"
+    summary_file_path = output_dir / "baseline_summary.json"
+
+    if (record_file_path.exists() or summary_file_path.exists()) and not force_overwrite:
+        raise OutputAlreadyExists(
+            "Baseline evaluation can't be ovewritten without extra `--force` paramater"
+        )
+
+    summary_file_path.unlink(missing_ok=True)
+
     logger.debug("Saving evaluation records to {}", record_file_path)
 
     async with aiofiles.open(record_file_path, mode="w", encoding="utf-8") as record_file:
@@ -142,7 +153,7 @@ async def evaluation_loop(
                     reference_answer=question.reference_answer,
                     expected_documents=question.expected_documents,
                     latency_s=time.perf_counter() - start_time,
-                    error=str(type(ex)),
+                    error=type(ex).__name__,
                 )
 
             await record_file.write(record.model_dump_json() + "\n")
@@ -177,7 +188,6 @@ async def evaluation_loop(
         latency_s=AnswerEvaluationLatency(mean=mean(latencies), max=max(latencies)),
     )
 
-    summary_file_path = output_dir / "baseline_summary.json"
     logger.debug("Saving evaluation summary to {}", summary_file_path)
     async with aiofiles.open(summary_file_path, mode="w", encoding="utf-8") as summary_file:
         await summary_file.write(summary.model_dump_json(indent=2))

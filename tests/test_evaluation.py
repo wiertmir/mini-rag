@@ -311,8 +311,8 @@ async def test_smoke_cli_owns_client_and_passes_custom_paths(
 @pytest.mark.parametrize(
     "model_dir",
     [
-        "qwen3-embedding_4b",
-        "qwen3-embedding_8b",
+        "qwen3-embedding:4b",
+        "qwen3-embedding:8b",
         "text-embedding-3-small",
     ],
 )
@@ -326,6 +326,19 @@ def test_committed_embedding_results_match_summary(model_dir: str) -> None:
     ]
     summary = json.loads((directory / "retrieval_smoke_summary.json").read_text())
     answerable, hits, missed = summarize_evaluation(records)
+    questions = [
+        Question.model_validate_json(line)
+        for line in (REPO_ROOT / "data/questions.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [r.id for r in records] == [q.id for q in questions]
+    for record, question in zip(records, questions, strict=True):
+        assert record.expected_documents == question.expected_documents
+        assert record.type == question.type
+        assert record.hit == is_hit(
+            frozenset(question.expected_documents),
+            (chunk.document_id for chunk in record.top_k),
+            question.answerable,
+        )
     assert len(records) == 30
     assert len({record.id for record in records}) == 30
     assert (answerable, hits, missed) == (
@@ -523,14 +536,21 @@ async def test_baseline_preserves_existing_reference_without_explicit_overwrite(
     ask.assert_not_awaited()
 
 
-def test_committed_answer_baseline_matches_dataset_summary_and_prompt() -> None:
+@pytest.mark.parametrize(
+    "relative",
+    [
+        str(path.relative_to(REPO_ROOT))
+        for path in sorted((REPO_ROOT / "eval/results").glob("*/*/baseline_summary.json"))
+    ],
+)
+def test_committed_answer_baseline_matches_dataset_summary_and_prompt(relative: str) -> None:
     from statistics import mean
 
     from mini_rag.hashing import calculate_text_sha
     from mini_rag.models import AnswerEvaluationRecord, AnswerEvaluationSummary
     from mini_rag.prompts import SYSTEM_PROMPT
 
-    directory = REPO_ROOT / "eval/results/text-embedding-3-small/gpt-5.4-mini"
+    directory = (REPO_ROOT / relative).parent
     records = [
         AnswerEvaluationRecord.model_validate_json(line)
         for line in (directory / "baseline.jsonl").read_text(encoding="utf-8").splitlines()
@@ -574,8 +594,8 @@ def test_committed_answer_baseline_matches_dataset_summary_and_prompt() -> None:
         ),
     }
     assert summary.counts.invalid_citation == 0
-    # The committed run used CRLF; Git stores LF. Accept only a line-ending
-    # change to this exact dataset, never changed questions or labels.
+    # Accept exact dataset bytes or a proven LF/CRLF-only difference,
+    # never changed questions or labels.
     import hashlib
 
     dataset_bytes = (REPO_ROOT / "data/questions.jsonl").read_bytes()

@@ -84,7 +84,7 @@ async def baseline_evaluation_loop(
 
     if (record_file_path.exists() or summary_file_path.exists()) and not force_overwrite:
         raise OutputAlreadyExists(
-            "Baseline evaluation can't be ovewritten without extra `--force` paramater"
+            "Baseline evaluation can't be ovewritten without extra `--force` parameter"
         )
 
     summary_file_path.unlink(missing_ok=True)

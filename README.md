@@ -554,11 +554,11 @@ After validating references against the numbered context, the system returns:
 
 ### Local embedding experiments (Ollama)
 
-The `embed_qwen3-embedding:4b.ipynb` and `embed_qwen3-embedding:8b.ipynb`
+The `embed_qwen3-embedding_4b.ipynb` and `embed_qwen3-embedding_8b.ipynb`
 notebooks inject an `AsyncOpenAI` client pointing to `http://localhost:11434/v1`
 with the local placeholder key `ollama`. Pull the matching model in Ollama first.
 They share `index/chunks_600_90.jsonl` but write separate model indexes under
-`index/qwen3-embedding:4b` and `index/qwen3-embedding:8b`.
+`index/qwen3-embedding_4b` and `index/qwen3-embedding_8b`.
 The matching `eval_*.ipynb` notebooks write results under `eval/results/<model>`.
 The OpenAI notebooks still require your private OpenAI API key.
 
@@ -625,3 +625,23 @@ python -m mini_rag.ask "What is climate mitigation?" --json-output \
 
 The implicit boolean flag also follows normal configuration precedence via
 `JSON_OUTPUT` or `json_output` in `[ask]`.
+
+### Portable paths (Linux and Windows)
+
+Filesystem names replace `:` with `_`, for example `index/qwen3-embedding_4b`
+and `eval/results/qwen3-embedding_4b/gemma4_12b-q8-8k`. Model identifiers sent
+to Ollama stay unchanged (`qwen3-embedding:4b`, `gemma4:12b-q8-8k`).
+Python entry points normalize path components, including explicit output paths;
+other Windows-invalid characters and reserved device names are handled too.
+Old index arguments such as `--index-dir=index/qwen3-embedding:4b` still work.
+The notebook names use `_` as well. Ignored local indexes are not moved by Git:
+rename existing colon-named directories locally before reusing them.
+
+To save a new local measurement without overwriting the committed baseline:
+
+```bash
+python eval/run_baseline.py --questions data/questions.jsonl --index-dir=index/qwen3-embedding:4b --local-ollama --model=gemma4:12b-q8-8k --output-dir=eval/results/local-new-run
+```
+
+Without `--output-dir`, the default portable model directory is used. If results
+already exist there, the command refuses to overwrite them unless given `--force`.

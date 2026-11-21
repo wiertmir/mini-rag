@@ -16,6 +16,7 @@ from mini_rag.embed import embed_texts_async
 from mini_rag.evaluation import is_hit, load_questions_async, summarize_evaluation
 from mini_rag.helpers import ErrorHandler
 from mini_rag.models import RetrievalSmokeRecord, RetrievedChunkRecord
+from mini_rag.paths import portable_path
 from mini_rag.retrieve import search
 from mini_rag.storage import load_index_async
 
@@ -64,6 +65,7 @@ async def eval_async(
 ) -> dict[str, Any]:
     index = await load_index_async(index_dir)
 
+    output_dir = portable_path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     smoke_jsonl_path = output_dir / "retrieval_smoke.jsonl"
     logger.info("Saving retrieval smoke evaluation to {}", smoke_jsonl_path)

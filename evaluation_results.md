@@ -1,101 +1,62 @@
 # Week 1 evaluation results
 
-**Reviewed:** 2026-11-20 · **Experiment commit:** 9c8e117 · **PR:** [#74](https://github.com/wiertmir/mini-rag/pull/74) · **Week review:** [#21](https://github.com/wiertmir/mini-rag/issues/21)
+Reviewed on 2026-11-20, experiment `9c8e117`. [PR #74](https://github.com/wiertmir/mini-rag/pull/74), [week review #21](https://github.com/wiertmir/mini-rag/issues/21).
 
-## My conclusion
+## Recommendation
 
-This is a useful, auditable first RAG baseline. My practical local choice from
-these runs is **Gemma 4 12B Q8 with an 8K context**. It matches or exceeds the
-expected-document citation hits of the larger local models while taking
-substantially less end-to-end time in these samples. Keep **text-embedding-3-small
-+ gpt-5.4-mini** as the API-backed reference.
+For further local work, I would choose **Gemma 4 12B Q8 with an 8K context**.
+It scored 25/28 expected-document citation hits with both embedding models.
+Larger answer models did not improve that score and took longer to respond.
+Qwen 4B is a reasonable, lighter starting point for embeddings.
+Keep OpenAI (`text-embedding-3-small` + `gpt-5.4-mini`) as the reference:
+the same 25/28 score, averaging 2.66 seconds per question.
 
-The most important finding is not “8B embeddings win” or “25/28 answers are
-correct.” **Document-level metrics penalize valid evidence from other chapters
-and reward irrelevant bibliography fragments.** Improve evidence labels and
-passage relevance before spending more time comparing model sizes.
+**25/28 does not mean 25 correct answers.** The metric checks whether an answer
+cites at least one expected document. A good answer from another chapter can
+score zero, while an answer based only on bibliography can earn a point.
+I would improve evidence evaluation before comparing more models.
 
-## 1. What is actually comparable
+## Answer results
 
-I validated **seven runs / 210 answer records**, plus **three retrieval smoke
-runs / 90 records**. Counts and latency statistics were recomputed from records.
-
-All seven answer runs use the same:
-
-- 30 questions: 28 answerable, Q29/Q30 unanswerable;
-- dataset SHA-256: 268f7b1440c1ac549a0c77d663cb0758452208ecfbe3259b584d058c2e679427;
-- chunks SHA-256: 6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414;
-- prompt SHA-256: 905c77411aa7334bd74922a19d0cc708772e69d24ca5a421bd092e626cb41558;
-- top_k=5, sequential execution, section chunking 600/90, minimum section 150,
-  matching tokenizer/caption/box parameters.
-
-The newly saved OpenAI run matches the available local chunk/dataset bytes.
-This resolves the *current artifact* mismatch noted during PR #72, without
-retroactively changing that historical measurement. The older OpenAI run
-remains in Git history.
-
-Causal-comparison limitations:
-
-- One generation run per combination; no repeated-seed confidence interval.
-- Six local combinations plus one all-OpenAI combination, not a complete matrix
-  separating cloud/local embedding and answer-model effects.
-- Some Qwen rankings differ across generation runs and smoke: 4B Q14, additionally
-  Q01 for the Qwen generator; 8B Q10, additionally Q01 for Gemma 31B. These are
-  not exact fixed-context generator comparisons. The cause of drift is unproved.
-- **cites_expected_document is not answer accuracy, faithfulness or complete
-  multi-source coverage.** One expected document suffices. Reference answers
-  remain marked draft_not_page_verified.
-
-## 2. Recomputed answer results
-
-“Answerable refusals” excludes the two correct unanswerable refusals. Errors
-are separate from refusals and stay in the 28-question denominator.
-All runs have **zero invalid_citation errors**; Q29/Q30 refuse without citations
-in **all seven runs**. There is one execution error across 210 records.
+I checked seven runs containing 210 records. Each run includes 28 questions
+answerable from the corpus and two outside it (Q29 and Q30).
+“Citation hits” counts expected-document citations as described above.
+“Answerable refusals” counts refusals only for the first 28 questions.
+Execution errors remain in the denominator of 28.
 
 | Embeddings | Answer model / records | Citation hits | Answerable refusals | Errors | Mean s | Median s | Max s |
 |---|---|---:|---:|---:|---:|---:|---:|
-| qwen3-embedding:4b | [gemma4:12b-q8-8k](eval/results/qwen3-embedding:4b/gemma4:12b-q8-8k/baseline.jsonl) | 25/28 | 2 | 0 | 35.99 | 34.56 | 75.80 |
-| qwen3-embedding:4b | [gemma4:31b](eval/results/qwen3-embedding:4b/gemma4:31b/baseline.jsonl) | 25/28 | 2 | 0 | 81.36 | 78.15 | 134.99 |
-| qwen3-embedding:4b | [qwen3.6:35b](eval/results/qwen3-embedding:4b/qwen3.6:35b/baseline.jsonl) | 24/28 | 2 | 0 | 41.27 | 41.16 | 65.72 |
-| qwen3-embedding:8b | [gemma4:12b-q8-8k](eval/results/qwen3-embedding:8b/gemma4:12b-q8-8k/baseline.jsonl) | 25/28 | 1 | 0 | 34.04 | 31.89 | 72.30 |
-| qwen3-embedding:8b | [gemma4:31b](eval/results/qwen3-embedding:8b/gemma4:31b/baseline.jsonl) | 22/28 | 2 | 0 | 90.93 | 89.09 | 158.87 |
-| qwen3-embedding:8b | [qwen3.6:35b](eval/results/qwen3-embedding:8b/qwen3.6:35b/baseline.jsonl) | 23/28 | 2 | 1 | 64.61 | 58.67 | 118.42 |
+| qwen3-embedding:4b | [gemma4:12b-q8-8k](eval/results/qwen3-embedding_4b/gemma4_12b-q8-8k/baseline.jsonl) | 25/28 | 2 | 0 | 35.99 | 34.56 | 75.80 |
+| qwen3-embedding:4b | [gemma4:31b](eval/results/qwen3-embedding_4b/gemma4_31b/baseline.jsonl) | 25/28 | 2 | 0 | 81.36 | 78.15 | 134.99 |
+| qwen3-embedding:4b | [qwen3.6:35b](eval/results/qwen3-embedding_4b/qwen3.6_35b/baseline.jsonl) | 24/28 | 2 | 0 | 41.27 | 41.16 | 65.72 |
+| qwen3-embedding:8b | [gemma4:12b-q8-8k](eval/results/qwen3-embedding_8b/gemma4_12b-q8-8k/baseline.jsonl) | 25/28 | 1 | 0 | 34.04 | 31.89 | 72.30 |
+| qwen3-embedding:8b | [gemma4:31b](eval/results/qwen3-embedding_8b/gemma4_31b/baseline.jsonl) | 22/28 | 2 | 0 | 90.93 | 89.09 | 158.87 |
+| qwen3-embedding:8b | [qwen3.6:35b](eval/results/qwen3-embedding_8b/qwen3.6_35b/baseline.jsonl) | 23/28 | 2 | 1 | 64.61 | 58.67 | 118.42 |
 | text-embedding-3-small | [gpt-5.4-mini](eval/results/text-embedding-3-small/gpt-5.4-mini/baseline.jsonl) | 25/28 | 0 | 0 | 2.66 | 2.55 | 4.19 |
 
-### What I would choose
+All models correctly refused Q29 and Q30 without citations.
+There were no `invalid_citation` errors. One execution error occurred:
+Q08 with Qwen 8B + Qwen 35B returned `ValidationError`. The loop continued
+and saved all 30 records. The saved data cannot tell whether the error arose
+while parsing the SDK response or during later validation.
 
-- **Local default: Gemma 4 12B Q8 / 8K.** 25/28 with both embedding sizes.
-  Within each embedding setup, Gemma 31B has about 2.26× (4B) or
-  2.67× (8B) the observed mean latency of Gemma 12B. This is practical evidence on this machine,
-  not proof of equal semantic quality or universal model-speed superiority.
-- **Gemma 31B is not justified here:** more memory/time, 25/28 or 22/28,
-  without demonstrated improvement over 12B.
-- **Qwen 3.6 35B is an alternative, not the default winner:** 24/28 or 23/28,
-  plus Q08's execution error with 8B embeddings.
-- **OpenAI is the low-latency reference:** 25/28, no errors, mean 2.66 seconds.
-  Privacy, offline operation and avoiding per-request charges can still favor
-  local inference. Token costs/energy were not recorded: no cost ranking is claimed.
-- **Embedding choice is not settled.** 8B improves document hit@5 but not 12B's
-  answer-hit count, and larger generators score lower with it. 4B is a reasonable
-  lighter baseline; assess answer-bearing passages before declaring 8B an upgrade.
+Gemma 31B's mean response time was about 2.26 times that of 12B with 4B
+embeddings and 2.67 times with 8B. With scores of 25/28 and 22/28, I see no
+reason to choose the larger Gemma here. Qwen 35B scored 24/28 and 23/28.
+The 8B embeddings improved document retrieval but not Gemma 12B's answer score.
 
-### Why 34 seconds can coexist with a fast GPU model
+Times cover the whole question: embedding, scheduling/model loading,
+generation and post-processing. They do not measure the LLM alone.
+On a 16 GB GPU, models may need reloading or RAM offloading.
+During a separate setup check, I observed model swapping with concurrent Qwen
+requests; we cannot confirm that it happened in every measured run.
+Token costs and energy use were not recorded. Local models still offer
+privacy, offline operation and no per-request charges.
 
-These are end-to-end latencies: query embedding, scheduling/model loading,
-generation and post-processing, not isolated tokens/second. On a 16 GB GPU,
-local embedding and answer models may trigger repeated loads; larger answer
-models can offload to RAM. Concurrent Qwen requests caused swapping during a
-separate setup check, but saved summaries do not establish contention during
-every experiment.
+## Did retrieval find useful sources?
 
-The 12B alias identifies an 8K setup. Summaries do not freeze all effective
-context/KV-cache settings, quantization digests, thinking budgets, output-token
-counts or warm/cold state. **Do not attribute differences to architecture alone.**
-A later controlled benchmark should cache query vectors, hold exact contexts
-fixed, warm one answer model, record these settings and repeat runs.
-
-## 3. Retrieval score versus useful evidence
+I also checked three retrieval-only runs, containing 90 records.
+`Document hit@5` means an expected document appeared among the five results.
 
 | Embeddings | Document hit@5 | Saved document misses |
 |---|---:|---|
@@ -103,29 +64,27 @@ fixed, warm one answer model, record these settings and repeat runs.
 | qwen3-embedding:4b | 26/28 | Q01, Q21 |
 | qwen3-embedding:8b | 28/28 | None |
 
-**28/28 does not mean 28 contexts contain usable answers.**
+Finding the document is not enough. Examples:
 
-- **Q18 / 4B:** all five chunks belong to the expected transport chapter, but
-  four are bibliographic material. The remaining aviation introduction contains
-  useful information without establishing the full road-vs-air energy-density
-  comparison in the draft reference. Document presence alone does not prove
-  that a refusal is a generator failure.
-- **Q21 / 8B:** the expected-document hit, WGIII_CH12_p043_c001, is a
-  table/source-reference fragment rather than an LCA explanation. Several other
-  chunks are bibliography. All local models refuse: bigger is not automatically better.
-- **Q25 / 8B + Gemma 12B:** all five contexts are bibliography. The answer
-  synthesizes explanatory claims from titles about de-risking and finance and
-  earns a citation hit. Titles are not equivalent to substantive support from
-  the studies or IPCC discussion. The larger models' refusals should not simply
-  be called lower factual quality.
+- Q18 / 4B: four of the five passages are bibliography. The fifth introduces
+  aviation but does not provide the full road-versus-air energy-density
+  comparison in the draft reference. A refusal need not be a model error.
+- Q21 / 8B: the hit `WGIII_CH12_p043_c001` is a table/source-reference fragment,
+  without an LCA explanation. Other results also include bibliography.
+  All local models refused to answer.
+- Q25 / 8B + Gemma 12B: all five passages are bibliography. The model built an
+  explanation from titles about finance and de-risking. It earned a citation
+  point, although the titles do not support the full explanation. The larger
+  models' refusals are not evidence of lower quality here.
 
-Follow-up: [#76 — bibliography and passage relevance](https://github.com/wiertmir/mini-rag/issues/76).
-Any filtering/reranking change must be a separate measured experiment, not a
-silent overwrite/re-embedding of the reference corpus.
+See [#76](https://github.com/wiertmir/mini-rag/issues/76).
+Test bibliography filtering or reranking as a new experiment, preserving
+the current baseline.
 
-## 4. False negatives and citation-format losses
+## Unfair scores and lost citations
 
-Three OpenAI-reference “misses” are supported by physical PDF evidence:
+Three OpenAI answers missed the expected-document metric even though
+I found support for their content in the PDFs:
 
 | Question | Labeled expectation | Actual cited evidence | Interpretation |
 |---|---|---|---|
@@ -133,32 +92,21 @@ Three OpenAI-reference “misses” are supported by physical PDF evidence:
 | Q09 | WGIII_CH05 / WGIII_CH06 | WGIII_CH11, physical p.27; also WGIII_CH08 | Efficiency enables clean electrification and reduces supply needs. |
 | Q19 | WGIII_CH11 | WGIII_CH06, physical p.65 | Names cement, primary steel and chemical feedstocks as challenging to electrify. |
 
-**Do not edit labels in place merely to improve scores.** Review evidence,
-version the dataset and rescore preserved records offline. Published 25/28
-remains the score against its frozen labels. See [#75](https://github.com/wiertmir/mini-rag/issues/75).
+Expected-document corrections are tracked in [#75](https://github.com/wiertmir/mini-rag/issues/75).
+After reviewing the sources, version the question set and rescore the saved
+answers. The published 25/28 remains the score for the old labels.
 
-**Q22 / 4B + Qwen 35B** is different: its answer uses grouped markers
-[2, 5] and [1, 3, 4]. The resolver supports single [n] markers, so only ref 3
-becomes a saved citation. That is a format/post-processing limitation, not
-clean evidence that the model never referred to expected chapters. Decide
-acceptance/rejection/normalization explicitly while preserving text as source
-authority. See [#78](https://github.com/wiertmir/mini-rag/issues/78).
+Q22 / 4B + Qwen 35B has a separate problem. The model used markers [2, 5]
+and [1, 3, 4], while the parser supports single [n] markers. Only reference 3
+survived in the saved citations. Grouped-citation handling needs a defined rule,
+with the original answer text preserved: [#78](https://github.com/wiertmir/mini-rag/issues/78).
+For Q08, we need the failure stage and an offline reproduction attempt:
+[#77](https://github.com/wiertmir/mini-rag/issues/77).
 
-## 5. A real execution error, with an unknown cause
+## Manual answer and PDF checks
 
-**Q08 / 8B + Qwen 35B** has error=ValidationError. The loop correctly continued,
-wrote 30 records and counted it separately from refusals. Null answer/context
-fields cannot distinguish SDK output parsing from downstream validation.
-I will not invent a root cause or classify it as a refusal.
-
-Preserve this result and add safe stage-level diagnostics. Prefer an offline
-reproduction; do not rerun the entire paid baseline to debug one row.
-See [#77](https://github.com/wiertmir/mini-rag/issues/77).
-
-## 6. Ten-record semantic spot-check of the OpenAI reference
-
-Compared saved answers with draft reference answers. This targeted check is
-**not a statistically representative accuracy estimate**.
+I compared ten saved OpenAI answers with the draft reference answers.
+This is a selected sample, so I do not use it to estimate overall accuracy.
 
 | Question | Assessment |
 |---|---|
@@ -173,15 +121,12 @@ Compared saved answers with draft reference answers. This targeted check is
 | Q29 | Explicit refusal, no Apple earnings claim or citations. |
 | Q30 | Explicit refusal, no invented Tokyo population or citations. |
 
-Also inspected every local record scored as a miss and Q08's error. The appendix
-classifies document presence, not whether the retrieved passage truly answers
-the question. Cautious refusal and incomplete labels are not necessarily model errors.
+I also reviewed every local answer scored as a miss, plus Q08's error.
+The appendix records document presence, not passage quality.
 
-## 7. Five checks against the actual PDFs
-
-Manual semantic checks of extracted text on **1-based physical PDF pages**,
-not merely stored chunk metadata. A multi-page citation was included and its
-endpoints checked against the retrieved chunk.
+I checked five selected claims against the PDF text. Page numbers below count
+physical PDF pages from 1. For the multi-page citation, I checked both pages
+and the range against the retrieved passage.
 
 | Claim | Citation | Short source evidence | Result |
 |---|---|---|---|
@@ -191,65 +136,78 @@ endpoints checked against the retrieved chunk.
 | Q09: efficiency complements electrification | WGIII_CH11 p.27; WGIII_CH11_p027_c002 | “Energy efficiency is a critical strategy for net zero transitions and enabling clean electrification.” | Supported |
 | Q19: hard-to-electrify industry | WGIII_CH06 p.65; WGIII_CH06_p065_c001 | Cement, primary steel and chemical feedstocks are challenging to electrify. | Supported |
 
-**5/5 selected citation claims supported.** This does not certify all sentences
-or all citations across 210 answers. All **518 citation metadata entries** were
-checked against current chunks, as were all retained chunk IDs. Metadata validity
-is a separate, weaker check than factual support.
+All five claims were supported. Separately, I checked 518 citation metadata
+entries and all retained chunk IDs against the current chunks.
+Matching metadata does not guarantee a correct answer.
 
-## 8. Week-1 reproducibility and quality audit
+## End-of-week checks
 
-**Verdict: passed for week-1 scope, with nonblocking follow-ups #75–#78.**
-This is not production-readiness certification or a claim that every answer is correct.
+Week 1 passed; follow-ups #75, #76, #77 and #78 remain open.
+Week 2 can use the current pipeline, schemas and embeddings as its reference.
+This verdict covers week 1, not production readiness.
 
-- Repository was clean at audit start; review used an isolated PR worktree and the
-  pinned Python 3.13.15. Required Day-1 layout is present.
-- All 20 manifest-listed PDFs are readable. No corpus download was required.
-- No .env/index/PDF/log artifacts are tracked; the example key is a placeholder.
-  The requested broad key-pattern scan has one false positive in a historical
-  merge header (the branch slug contains “ask-function-and-cli-command”).
-  Patch-only scanning has **zero candidate matches**; inspection found no key
-  behind that header hit. Do not treat a merge-title regex hit as a leaked secret.
-- Full-corpus ingest ran twice with the stored section/tokenizer/minimum/caption/box
-  settings into /tmp/pr74-week/run1 and run2. Both produced **6,264 chunks** and
-  byte-identical SHA-256 **6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414**,
-  also identical to the existing indexed chunk file. Existing index artifacts were
-  not overwritten. Run durations: 334.45 s and 333.42 s.
-- Validated index row/chunk/manifest counts, dimensions, hashes and ingest parameters:
-  OpenAI **(6264, 1536)**, Qwen 4B **(6264, 2560)**, Qwen 8B **(6264, 4096)**.
-  Real-row self-query top scores are approximately 1 for all three.
-- Offline suite with no API key and closed endpoint: **313 passed, 2 live deselected**.
-  Evaluation tests: **38 passed**. Ruff lint/format and mypy source + modified tests
-  pass; imports resolve to the isolated PR checkout.
-- Expanded committed-artifact regression coverage from one answer run to all seven;
-  smoke tests also recompute hits against current question labels. No learner
-  implementation or saved results were changed by this review.
-- GitHub [Acceptance run 44738489501](https://github.com/wiertmir/mini-rag/actions/runs/44738489501):
-  **6 passed, 0 skipped**, on experiment commit 9c8e117. Corpus completeness was
-  verified. It covers traceable metadata, determinism, both chunking strategies,
-  overlap, missing PDFs and empty pages. Later review commits change only tests/docs.
-- Ten baseline answers and all local misses reviewed; five selected PDF claims
-  supported; all seven Q29/Q30 pairs refuse with no invented earnings/population.
-- README commands remain the reproduction runbook. Review reused existing
-  embeddings and saved answers; **no generation/query-embedding API calls or
-  document re-embedding** were used. Temporary ingest was the deliberate milestone
-  determinism check, not a replacement of the accepted corpus.
-- Final PR CI and merge status are recorded in the PR / week-review issue.
-  The remaining findings are explicit follow-ups, not hidden baseline changes.
+- The repository was clean at audit start. I used a separate worktree with
+  Python 3.13.15. The required Day 1 layout was complete.
+- All 20 manifest-listed PDFs were readable; no downloads were needed.
+- Two full ingests each produced 6264 chunks, byte-identical to the existing
+  chunk file. They took 334.45 s and 333.42 s and were saved to
+  `/tmp/pr74-week/run1` and `/tmp/pr74-week/run2`, without overwriting indexes.
+- Index row counts, dimensions, hashes and ingest parameters matched:
+  OpenAI (6264, 1536), Qwen 4B (6264, 2560), Qwen 8B (6264, 4096).
+  Looking up a vector in its own index returned a score of approximately 1.
+- Offline tests without an API key and with a closed endpoint: 313 passed,
+  2 live tests deselected. Evaluation tests: 38 passed.
+  Ruff lint/format, mypy for source and modified tests, and import checks passed.
+  Saved-result tests were expanded from one run to all seven; smoke tests
+  recompute hits against the current questions.
+- [Acceptance run 44738489501](https://github.com/wiertmir/mini-rag/actions/runs/44738489501):
+  6 passed, 0 skipped on `9c8e117`, after verifying PDF completeness.
+  It covers metadata, determinism, both chunking strategies, overlap, missing
+  PDFs and empty pages. Later commits changed only tests and documentation.
+- `.env`, indexes, PDFs and logs were not tracked by Git; the example key was
+  a placeholder. A history scan returned one false positive in a merge title
+  (`ask-function-and-cli-command`), with no key. A patch-only scan found no candidates.
+- The audit reused saved answers and embeddings. It made no answer-generation,
+  query-embedding or corpus re-embedding requests. Learner implementation and
+  saved results were unchanged. Final CI and merge status are in the PR;
+  reproduction instructions are in the README.
 
-## 9. Follow-up priorities without moving the baseline
+## Measurement setup and future comparisons
 
-1. Evidence labels [#75](https://github.com/wiertmir/mini-rag/issues/75) and
-   passage relevance/bibliography [#76](https://github.com/wiertmir/mini-rag/issues/76).
-2. Actionable error diagnostics [#77](https://github.com/wiertmir/mini-rag/issues/77).
-3. Explicit grouped-marker grammar [#78](https://github.com/wiertmir/mini-rag/issues/78).
-4. Controlled repeated local performance measurements with cached query vectors,
-   fixed contexts and recorded runtime settings.
+Results and statistics were recomputed from records. All seven runs share:
 
-These are bounded follow-ups, not reasons to erase imperfect experiments or
-claim production readiness. Week 2 can reuse this measured plain-Python pipeline,
-schemas and row-aligned embeddings as its comparison target.
+- 30 questions, `top_k=5`, sequential execution;
+- section chunking 600/90, minimum 150 tokens; matching tokenizer,
+  caption-skipping and box-handling settings;
+- dataset SHA-256: `268f7b1440c1ac549a0c77d663cb0758452208ecfbe3259b584d058c2e679427`;
+- chunks SHA-256: `6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414`;
+- prompt SHA-256: `905c77411aa7334bd74922a19d0cc708772e69d24ca5a421bd092e626cb41558`.
 
-## Appendix: every scored answerable miss
+The new OpenAI run matches the available question and chunk files.
+The earlier mismatch noted in PR #72 does not affect this saved run;
+the older result remains in Git history.
+
+Each combination ran only once. We have six local configurations and one
+all-OpenAI configuration, so we cannot separate every model's effect.
+Qwen rankings differ between retrieval smoke and answer runs: for 4B at Q14
+and Q01 with the Qwen generator; for 8B at Q10 and Q01 with Gemma 31B.
+The cause is unknown. Generators did not always receive exactly the same context.
+Reference answers still have status `draft_not_page_verified`.
+
+The 12B alias identifies an 8K setup. Summaries do not record all effective
+context/KV-cache settings, quantization digests, thinking budgets, output-token
+counts or warm/cold state. Timings describe these runs; they cannot establish
+that architecture alone caused the differences.
+
+Next, improve labels and passage-relevance evaluation (#75, #76), add error
+diagnostics (#77), and define citation syntax (#78). For speed comparisons,
+cache question vectors, fix the exact contexts, warm one answer model,
+record its settings and repeat the measurements.
+
+## Appendix: every scored miss on answerable questions
+
+`present` means an expected document was in the context, not necessarily
+that the passage contained an answer. `absent` means it was missing.
 
 | Embeddings | Answer model | Question | Expected document | Observed outcome |
 |---|---|---|---|---|

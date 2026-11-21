@@ -19,6 +19,7 @@ from mini_rag.errors import (
 from mini_rag.hashing import calculate_file_sha
 from mini_rag.ingest import load_ingest_manifest
 from mini_rag.models import Chunk, EmbeddingManifest, IngestManifest
+from mini_rag.paths import portable_path
 
 EMBEDDINGS_FILENAME: Final[str] = "embeddings.npy"
 EMBEDDINGS_MANIFEST_FILENAME: Final[str] = "embedding_manifest.json"
@@ -34,6 +35,7 @@ class LoadedIndex(NamedTuple):
 
 
 async def load_embedding_manifest_async(index_dir: Path) -> EmbeddingManifest:
+    index_dir = portable_path(index_dir)
     manifest_path = index_dir / EMBEDDINGS_MANIFEST_FILENAME
     logger.info("Loading embeddings manifest from {}", manifest_path)
     async with aiofiles.open(manifest_path, mode="r", encoding="utf-8") as file:
@@ -72,6 +74,7 @@ async def load_index_async(index_dir: Path, chunks_path: Path | None = None) -> 
 async def load_embeddings_and_manifest_async(
     index_dir: Path, chunks_path: Path | None = None
 ) -> tuple[NDArray[np.float32], EmbeddingManifest]:
+    index_dir = portable_path(index_dir)
     manifest = await load_embedding_manifest_async(index_dir)
 
     chunks_path = chunks_path or manifest.chunks_path
@@ -112,6 +115,7 @@ def save_index(output_dir: Path, matrix: NDArray[np.float32], manifest: Embeddin
             f"Inconsistent number of columns (dimension) in manifest ({manifest.dimension}) and matrix ({matrix.shape[1]})"
         )
 
+    output_dir = portable_path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     embeddings_path = output_dir / EMBEDDINGS_FILENAME
     manifest_path = output_dir / EMBEDDINGS_MANIFEST_FILENAME

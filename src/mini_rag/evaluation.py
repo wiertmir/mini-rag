@@ -21,6 +21,7 @@ from mini_rag.models import (
     Question,
     RetrievalEvaluationRecord,
 )
+from mini_rag.paths import portable_path
 from mini_rag.prompts import SYSTEM_PROMPT
 
 logger = rich_struct.log.get_logger()
@@ -77,6 +78,7 @@ async def baseline_evaluation_loop(
     logger.info("Loading questions from {}", questions_path)
     questions = load_questions_async(questions_path)
 
+    output_dir = portable_path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     record_file_path = output_dir / "baseline.jsonl"

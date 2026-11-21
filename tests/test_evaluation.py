@@ -543,7 +543,10 @@ async def test_baseline_preserves_existing_reference_without_explicit_overwrite(
         for path in sorted((REPO_ROOT / "eval/results").glob("*/*/baseline_summary.json"))
     ],
 )
-def test_committed_answer_baseline_matches_dataset_summary_and_prompt(relative: str) -> None:
+@pytest.mark.parametrize("checkout_newline", [b"\n", b"\r\n"], ids=["LF", "CRLF"])
+def test_committed_answer_baseline_matches_dataset_summary_and_prompt(
+    relative: str, checkout_newline: bytes
+) -> None:
     from statistics import mean
 
     from mini_rag.hashing import calculate_text_sha
@@ -598,10 +601,14 @@ def test_committed_answer_baseline_matches_dataset_summary_and_prompt(relative: 
     # never changed questions or labels.
     import hashlib
 
+    # Exercise both checkout styles, regardless of the host running pytest.
     dataset_bytes = (REPO_ROOT / "data/questions.jsonl").read_bytes()
+    dataset_bytes = dataset_bytes.replace(b"\r\n", b"\n").replace(b"\n", checkout_newline)
+    dataset_lf = dataset_bytes.replace(b"\r\n", b"\n")
     assert summary.configuration.dataset_sha256 in {
         hashlib.sha256(dataset_bytes).hexdigest(),
-        hashlib.sha256(dataset_bytes.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")).hexdigest(),
+        hashlib.sha256(dataset_lf).hexdigest(),
+        hashlib.sha256(dataset_lf.replace(b"\n", b"\r\n")).hexdigest(),
     }
     assert summary.configuration.prompt_sha256 == calculate_text_sha(SYSTEM_PROMPT)
     assert summary.latency_s.mean == pytest.approx(mean(r.latency_s for r in records))

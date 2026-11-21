@@ -1,28 +1,28 @@
-# Wyniki ewaluacji: tydzień 1
+# Week 1 evaluation results
 
-Przegląd z 2026-11-20, eksperyment `9c8e117`. [PR #74](https://github.com/wiertmir/mini-rag/pull/74), [podsumowanie tygodnia #21](https://github.com/wiertmir/mini-rag/issues/21).
+Reviewed on 2026-11-20, experiment `9c8e117`. [PR #74](https://github.com/wiertmir/mini-rag/pull/74), [week review #21](https://github.com/wiertmir/mini-rag/issues/21).
 
-## Co z tego wynika
+## Recommendation
 
-Do dalszej pracy lokalnej wybrałbym **Gemma 4 12B Q8 z kontekstem 8K**.
-Z oboma modelami embeddingowymi uzyskała 25/28 trafień w oczekiwany dokument.
-Większe modele nie poprawiły tego wyniku, a odpowiedzi trwały dłużej.
-Qwen 4B jest rozsądnym, lżejszym punktem wyjścia dla embeddingów.
-OpenAI (`text-embedding-3-small` + `gpt-5.4-mini`) zostaje wersją porównawczą:
-ten sam wynik 25/28, średnio 2,66 s na pytanie.
+For further local work, I would choose **Gemma 4 12B Q8 with an 8K context**.
+It scored 25/28 expected-document citation hits with both embedding models.
+Larger answer models did not improve that score and took longer to respond.
+Qwen 4B is a reasonable, lighter starting point for embeddings.
+Keep OpenAI (`text-embedding-3-small` + `gpt-5.4-mini`) as the reference:
+the same 25/28 score, averaging 2.66 seconds per question.
 
-**25/28 nie oznacza 25 poprawnych odpowiedzi.** Liczymy, czy odpowiedź cytuje
-przynajmniej jeden oczekiwany dokument. To niedoskonała miara: dobra odpowiedź
-z innego rozdziału może dostać zero, a odpowiedź oparta na samej bibliografii
-może dostać punkt. Najpierw poprawiłbym ocenę źródeł, potem porównywał modele.
+**25/28 does not mean 25 correct answers.** The metric checks whether an answer
+cites at least one expected document. A good answer from another chapter can
+score zero, while an answer based only on bibliography can earn a point.
+I would improve evidence evaluation before comparing more models.
 
-## Wyniki odpowiedzi
+## Answer results
 
-Sprawdziłem siedem przebiegów, łącznie 210 rekordów. Każdy obejmuje 28 pytań
-z odpowiedzią w korpusie i dwa spoza korpusu (Q29 i Q30).
-„Citation hits” to opisane wyżej trafienia w oczekiwany dokument.
-„Answerable refusals” liczy odmowy tylko dla pierwszych 28 pytań.
-Błąd wykonania też zostaje w mianowniku 28.
+I checked seven runs containing 210 records. Each run includes 28 questions
+answerable from the corpus and two outside it (Q29 and Q30).
+“Citation hits” counts expected-document citations as described above.
+“Answerable refusals” counts refusals only for the first 28 questions.
+Execution errors remain in the denominator of 28.
 
 | Embeddings | Answer model / records | Citation hits | Answerable refusals | Errors | Mean s | Median s | Max s |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -34,29 +34,29 @@ Błąd wykonania też zostaje w mianowniku 28.
 | qwen3-embedding:8b | [qwen3.6:35b](eval/results/qwen3-embedding_8b/qwen3.6_35b/baseline.jsonl) | 23/28 | 2 | 1 | 64.61 | 58.67 | 118.42 |
 | text-embedding-3-small | [gpt-5.4-mini](eval/results/text-embedding-3-small/gpt-5.4-mini/baseline.jsonl) | 25/28 | 0 | 0 | 2.66 | 2.55 | 4.19 |
 
-Wszystkie modele prawidłowo odmówiły odpowiedzi na Q29 i Q30, bez cytowań.
-Nie było błędów `invalid_citation`. Wystąpił jeden błąd wykonania:
-Q08 dla Qwen 8B + Qwen 35B zwróciło `ValidationError`. Pętla kontynuowała pracę
-i zapisała wszystkie 30 rekordów. Zapisane dane nie mówią, czy błąd powstał
-przy parsowaniu odpowiedzi SDK, czy przy późniejszej walidacji.
+All models correctly refused Q29 and Q30 without citations.
+There were no `invalid_citation` errors. One execution error occurred:
+Q08 with Qwen 8B + Qwen 35B returned `ValidationError`. The loop continued
+and saved all 30 records. The saved data cannot tell whether the error arose
+while parsing the SDK response or during later validation.
 
-Gemma 31B miała średni czas odpowiedzi około 2,26 razy dłuższy od 12B
-przy embeddingach 4B i 2,67 razy przy 8B. Przy wynikach 25/28 i 22/28
-nie widzę tu powodu do wyboru większej Gemmy. Qwen 35B uzyskał 24/28 i 23/28.
-Embeddingi 8B poprawiły wyszukiwanie dokumentów, ale nie wynik odpowiedzi Gemmy 12B.
+Gemma 31B's mean response time was about 2.26 times that of 12B with 4B
+embeddings and 2.67 times with 8B. With scores of 25/28 and 22/28, I see no
+reason to choose the larger Gemma here. Qwen 35B scored 24/28 and 23/28.
+The 8B embeddings improved document retrieval but not Gemma 12B's answer score.
 
-Czasy obejmują całe pytanie: embedding, oczekiwanie/ładowanie modeli,
-generowanie i obróbkę odpowiedzi. Nie są pomiarem szybkości samego LLM.
-Na GPU 16 GB modele mogą wymagać przeładowywania lub korzystać z RAM.
-Podczas osobnego sprawdzania konfiguracji widziałem wymiany modeli przy
-równoległych zapytaniach Qwen; nie mamy potwierdzenia, że działo się to
-w każdym z tych pomiarów. Nie zapisano kosztów tokenów ani zużycia energii.
-Lokalne modele nadal mają zalety: prywatność, pracę offline i brak opłat za zapytanie.
+Times cover the whole question: embedding, scheduling/model loading,
+generation and post-processing. They do not measure the LLM alone.
+On a 16 GB GPU, models may need reloading or RAM offloading.
+During a separate setup check, I observed model swapping with concurrent Qwen
+requests; we cannot confirm that it happened in every measured run.
+Token costs and energy use were not recorded. Local models still offer
+privacy, offline operation and no per-request charges.
 
-## Czy wyszukiwarka znalazła przydatne źródła?
+## Did retrieval find useful sources?
 
-Sprawdziłem także trzy przebiegi samego wyszukiwania, razem 90 rekordów.
-`Document hit@5` oznacza obecność oczekiwanego dokumentu w pięciu wynikach.
+I also checked three retrieval-only runs, containing 90 records.
+`Document hit@5` means an expected document appeared among the five results.
 
 | Embeddings | Document hit@5 | Saved document misses |
 |---|---:|---|
@@ -64,27 +64,27 @@ Sprawdziłem także trzy przebiegi samego wyszukiwania, razem 90 rekordów.
 | qwen3-embedding:4b | 26/28 | Q01, Q21 |
 | qwen3-embedding:8b | 28/28 | None |
 
-Obecność dokumentu nie wystarcza. Przykłady:
+Finding the document is not enough. Examples:
 
-- Q18 / 4B: cztery z pięciu fragmentów to bibliografia. Piąty jest wstępem
-  o lotnictwie i nie daje pełnego porównania transportu drogowego z lotniczym
-  pod kątem gęstości energii. Odmowa nie musi oznaczać błędu modelu.
-- Q21 / 8B: trafienie `WGIII_CH12_p043_c001` to fragment tabeli/odnośników,
-  bez wyjaśnienia LCA. W pozostałych wynikach też jest bibliografia.
-  Wszystkie lokalne modele odmówiły odpowiedzi.
-- Q25 / 8B + Gemma 12B: wszystkie pięć fragmentów to bibliografia.
-  Model ułożył wyjaśnienie na podstawie tytułów o finansowaniu i ograniczaniu
-  ryzyka. Dostał punkt za cytowanie, choć tytuły nie uzasadniają całego wyjaśnienia.
-  Odmowy większych modeli nie są tu dowodem ich gorszej jakości.
+- Q18 / 4B: four of the five passages are bibliography. The fifth introduces
+  aviation but does not provide the full road-versus-air energy-density
+  comparison in the draft reference. A refusal need not be a model error.
+- Q21 / 8B: the hit `WGIII_CH12_p043_c001` is a table/source-reference fragment,
+  without an LCA explanation. Other results also include bibliography.
+  All local models refused to answer.
+- Q25 / 8B + Gemma 12B: all five passages are bibliography. The model built an
+  explanation from titles about finance and de-risking. It earned a citation
+  point, although the titles do not support the full explanation. The larger
+  models' refusals are not evidence of lower quality here.
 
-To temat [#76](https://github.com/wiertmir/mini-rag/issues/76).
-Filtrowanie bibliografii lub reranking warto sprawdzić jako nowy eksperyment,
-z zachowaniem obecnego baseline'u.
+See [#76](https://github.com/wiertmir/mini-rag/issues/76).
+Test bibliography filtering or reranking as a new experiment, preserving
+the current baseline.
 
-## Gdzie ocena jest niesprawiedliwa lub gubi cytowania
+## Unfair scores and lost citations
 
-Trzy odpowiedzi OpenAI dostały zero za dokument, mimo że znalazłem
-potwierdzenie ich treści w PDF-ach:
+Three OpenAI answers missed the expected-document metric even though
+I found support for their content in the PDFs:
 
 | Question | Labeled expectation | Actual cited evidence | Interpretation |
 |---|---|---|---|
@@ -92,21 +92,21 @@ potwierdzenie ich treści w PDF-ach:
 | Q09 | WGIII_CH05 / WGIII_CH06 | WGIII_CH11, physical p.27; also WGIII_CH08 | Efficiency enables clean electrification and reduces supply needs. |
 | Q19 | WGIII_CH11 | WGIII_CH06, physical p.65 | Names cement, primary steel and chemical feedstocks as challenging to electrify. |
 
-Poprawki oczekiwanych dokumentów są w [#75](https://github.com/wiertmir/mini-rag/issues/75).
-Po przeglądzie źródeł trzeba zapisać nową wersję pytań i przeliczyć zachowane
-odpowiedzi. Dotychczasowe 25/28 pozostaje wynikiem dla starej wersji etykiet.
+Expected-document corrections are tracked in [#75](https://github.com/wiertmir/mini-rag/issues/75).
+After reviewing the sources, version the question set and rescore the saved
+answers. The published 25/28 remains the score for the old labels.
 
-Osobny problem dotyczy Q22 / 4B + Qwen 35B. Model użył znaczników [2, 5]
-i [1, 3, 4], a parser obsługuje pojedyncze [n]. W zapisanych cytowaniach zostało
-tylko odwołanie 3. Trzeba ustalić obsługę grup cytowań, zachowując oryginalny
-tekst odpowiedzi: [#78](https://github.com/wiertmir/mini-rag/issues/78).
-Dla błędu Q08 potrzebna jest informacja o etapie awarii i próba odtworzenia
-offline: [#77](https://github.com/wiertmir/mini-rag/issues/77).
+Q22 / 4B + Qwen 35B has a separate problem. The model used markers [2, 5]
+and [1, 3, 4], while the parser supports single [n] markers. Only reference 3
+survived in the saved citations. Grouped-citation handling needs a defined rule,
+with the original answer text preserved: [#78](https://github.com/wiertmir/mini-rag/issues/78).
+For Q08, we need the failure stage and an offline reproduction attempt:
+[#77](https://github.com/wiertmir/mini-rag/issues/77).
 
-## Ręczne sprawdzenie odpowiedzi i PDF-ów
+## Manual answer and PDF checks
 
-Porównałem dziesięć zapisanych odpowiedzi OpenAI z roboczymi odpowiedziami
-wzorcowymi. To wybrana próbka, więc nie wyliczam z niej jakości całego zbioru.
+I compared ten saved OpenAI answers with the draft reference answers.
+This is a selected sample, so I do not use it to estimate overall accuracy.
 
 | Question | Assessment |
 |---|---|
@@ -121,12 +121,12 @@ wzorcowymi. To wybrana próbka, więc nie wyliczam z niej jakości całego zbior
 | Q29 | Explicit refusal, no Apple earnings claim or citations. |
 | Q30 | Explicit refusal, no invented Tokyo population or citations. |
 
-Przejrzałem też wszystkie lokalne odpowiedzi ocenione jako nietrafione oraz
-błąd Q08. Tabela w dodatku pokazuje obecność dokumentu, a nie jakość fragmentu.
+I also reviewed every local answer scored as a miss, plus Q08's error.
+The appendix records document presence, not passage quality.
 
-Pięć wybranych twierdzeń sprawdziłem w treści PDF-ów. Numery stron poniżej
-liczą fizyczne strony pliku od 1. Dla cytowania wielostronicowego sprawdziłem
-obie strony i zgodność zakresu z fragmentem.
+I checked five selected claims against the PDF text. Page numbers below count
+physical PDF pages from 1. For the multi-page citation, I checked both pages
+and the range against the retrieved passage.
 
 | Claim | Citation | Short source evidence | Result |
 |---|---|---|---|
@@ -136,78 +136,78 @@ obie strony i zgodność zakresu z fragmentem.
 | Q09: efficiency complements electrification | WGIII_CH11 p.27; WGIII_CH11_p027_c002 | “Energy efficiency is a critical strategy for net zero transitions and enabling clean electrification.” | Supported |
 | Q19: hard-to-electrify industry | WGIII_CH06 p.65; WGIII_CH06_p065_c001 | Cement, primary steel and chemical feedstocks are challenging to electrify. | Supported |
 
-Wszystkie pięć twierdzeń miało potwierdzenie. Osobno sprawdziłem zgodność
-518 wpisów metadanych cytowań i wszystkich zachowanych ID fragmentów
-z aktualnymi chunkami. Zgodne metadane nie gwarantują prawdziwości odpowiedzi.
+All five claims were supported. Separately, I checked 518 citation metadata
+entries and all retained chunk IDs against the current chunks.
+Matching metadata does not guarantee a correct answer.
 
-## Co sprawdzono na koniec tygodnia
+## End-of-week checks
 
-Tydzień 1 zaliczony; poprawki #75, #76, #77 i #78 pozostają otwarte.
-Można przejść do tygodnia 2 i używać obecnego pipeline'u, schematów oraz
-embeddingów jako punktu porównania. To ocena zakresu tygodnia 1, nie gotowości produkcyjnej.
+Week 1 passed; follow-ups #75, #76, #77 and #78 remain open.
+Week 2 can use the current pipeline, schemas and embeddings as its reference.
+This verdict covers week 1, not production readiness.
 
-- Repozytorium było czyste na początku audytu. Pracowałem w osobnym worktree
-  z Pythonem 3.13.15. Struktura wymagana na dzień 1 była kompletna.
-- Wszystkie 20 PDF-ów z manifestu dało się odczytać; niczego nie pobierałem.
-- Dwa pełne ingesty dały po 6264 fragmenty, identyczne bajtowo z obecnym
-  plikiem chunków. Trwały 334,45 s i 333,42 s. Zapisałem je w
-  `/tmp/pr74-week/run1` i `/tmp/pr74-week/run2`, bez nadpisywania indeksów.
-- Indeksy miały prawidłowe liczby wierszy, wymiary, hashe i parametry ingestu:
+- The repository was clean at audit start. I used a separate worktree with
+  Python 3.13.15. The required Day 1 layout was complete.
+- All 20 manifest-listed PDFs were readable; no downloads were needed.
+- Two full ingests each produced 6264 chunks, byte-identical to the existing
+  chunk file. They took 334.45 s and 333.42 s and were saved to
+  `/tmp/pr74-week/run1` and `/tmp/pr74-week/run2`, without overwriting indexes.
+- Index row counts, dimensions, hashes and ingest parameters matched:
   OpenAI (6264, 1536), Qwen 4B (6264, 2560), Qwen 8B (6264, 4096).
-  Wyszukanie wektora w jego własnym indeksie dawało wynik około 1.
-- Testy offline bez klucza API i z zamkniętym endpointem: 313 zaliczonych,
-  2 testy live pominięte przez filtr. Testy ewaluacji: 38 zaliczonych.
-  Ruff (lint/format), mypy dla źródeł i zmienionych testów oraz importy przeszły.
-  Testy zapisanych wyników rozszerzyłem z jednego do wszystkich siedmiu przebiegów;
-  testy smoke przeliczają trafienia względem obecnych pytań.
+  Looking up a vector in its own index returned a score of approximately 1.
+- Offline tests without an API key and with a closed endpoint: 313 passed,
+  2 live tests deselected. Evaluation tests: 38 passed.
+  Ruff lint/format, mypy for source and modified tests, and import checks passed.
+  Saved-result tests were expanded from one run to all seven; smoke tests
+  recompute hits against the current questions.
 - [Acceptance run 44738489501](https://github.com/wiertmir/mini-rag/actions/runs/44738489501):
-  6 zaliczonych, 0 pominiętych na `9c8e117`, po sprawdzeniu kompletności PDF-ów.
-  Obejmuje metadane, deterministyczność, obie strategie chunkingu, overlap,
-  brakujący PDF i pustą stronę. Późniejsze commity zmieniały tylko testy i dokumentację.
-- `.env`, indeksy, PDF-y i logi nie były śledzone przez Git; przykładowy klucz
-  był placeholderem. Skan historii zwrócił jeden fałszywy alarm w tytule merge'a
-  (`ask-function-and-cli-command`), bez klucza. Skan samych patchy nie zwrócił kandydatów.
-- Audyt korzystał z zapisanych odpowiedzi i embeddingów. Nie wykonywałem zapytań
-  generujących odpowiedzi, embeddingów pytań ani ponownego embeddingowania korpusu.
-  Implementacja ucznia i wyniki nie zostały zmienione. Końcowe CI i merge są w PR;
-  instrukcje odtworzenia są w README.
+  6 passed, 0 skipped on `9c8e117`, after verifying PDF completeness.
+  It covers metadata, determinism, both chunking strategies, overlap, missing
+  PDFs and empty pages. Later commits changed only tests and documentation.
+- `.env`, indexes, PDFs and logs were not tracked by Git; the example key was
+  a placeholder. A history scan returned one false positive in a merge title
+  (`ask-function-and-cli-command`), with no key. A patch-only scan found no candidates.
+- The audit reused saved answers and embeddings. It made no answer-generation,
+  query-embedding or corpus re-embedding requests. Learner implementation and
+  saved results were unchanged. Final CI and merge status are in the PR;
+  reproduction instructions are in the README.
 
-## Warunki pomiaru i dalsze porównania
+## Measurement setup and future comparisons
 
-Wyniki i statystyki przeliczyłem z rekordów. Wspólne ustawienia siedmiu przebiegów:
+Results and statistics were recomputed from records. All seven runs share:
 
-- 30 pytań, `top_k=5`, wykonanie sekwencyjne;
-- chunking sekcyjny 600/90, minimum 150 tokenów; zgodne ustawienia tokenizera,
-  pomijania podpisów i obsługi ramek;
+- 30 questions, `top_k=5`, sequential execution;
+- section chunking 600/90, minimum 150 tokens; matching tokenizer,
+  caption-skipping and box-handling settings;
 - dataset SHA-256: `268f7b1440c1ac549a0c77d663cb0758452208ecfbe3259b584d058c2e679427`;
 - chunks SHA-256: `6b2ae2d4d87996d82b83c373c96cba78d3c0a10672b48990c71f35e54d8d1414`;
 - prompt SHA-256: `905c77411aa7334bd74922a19d0cc708772e69d24ca5a421bd092e626cb41558`.
 
-Nowy przebieg OpenAI zgadza się z dostępnymi plikami pytań i chunków.
-Wcześniejszy problem zgodności z PR #72 nie dotyczy tego zapisu;
-starszy wynik pozostał w historii Git.
+The new OpenAI run matches the available question and chunk files.
+The earlier mismatch noted in PR #72 does not affect this saved run;
+the older result remains in Git history.
 
-Każda kombinacja była uruchomiona tylko raz. Mamy sześć lokalnych konfiguracji
-i jedną w całości OpenAI, więc nie da się oddzielić wszystkich wpływów modeli.
-Rankingi Qwen różnią się między smoke a przebiegami odpowiedzi: dla 4B w Q14
-oraz Q01 z generatorem Qwen; dla 8B w Q10 oraz Q01 z Gemmą 31B.
-Przyczyny nie ustalono. Generatory nie zawsze dostawały dokładnie ten sam kontekst.
-Odpowiedzi wzorcowe mają nadal status `draft_not_page_verified`.
+Each combination ran only once. We have six local configurations and one
+all-OpenAI configuration, so we cannot separate every model's effect.
+Qwen rankings differ between retrieval smoke and answer runs: for 4B at Q14
+and Q01 with the Qwen generator; for 8B at Q10 and Q01 with Gemma 31B.
+The cause is unknown. Generators did not always receive exactly the same context.
+Reference answers still have status `draft_not_page_verified`.
 
-Alias 12B oznacza konfigurację 8K. Podsumowania nie zapisują wszystkich
-ustawień kontekstu/KV-cache, digestów kwantyzacji, budżetów myślenia, liczby
-tokenów wyjściowych ani stanu rozgrzania modeli. Czasy dotyczą tych uruchomień;
-nie wystarczają do przypisania różnic samej architekturze.
+The 12B alias identifies an 8K setup. Summaries do not record all effective
+context/KV-cache settings, quantization digests, thinking budgets, output-token
+counts or warm/cold state. Timings describe these runs; they cannot establish
+that architecture alone caused the differences.
 
-Kolejność dalszej pracy: poprawić etykiety i ocenę przydatności fragmentów
-(#75, #76), dodać diagnostykę błędów (#77), ustalić składnię cytowań (#78).
-Do porównania szybkości warto zachować wektory pytań, ustalić identyczne
-konteksty, rozgrzać jeden model odpowiedzi, zapisać ustawienia i powtórzyć pomiary.
+Next, improve labels and passage-relevance evaluation (#75, #76), add error
+diagnostics (#77), and define citation syntax (#78). For speed comparisons,
+cache question vectors, fix the exact contexts, warm one answer model,
+record its settings and repeat the measurements.
 
-## Dodatek: wszystkie nietrafienia dla pytań z odpowiedzią w korpusie
+## Appendix: every scored miss on answerable questions
 
-`present` oznacza, że oczekiwany dokument był w kontekście. Nie przesądza,
-czy fragment zawierał odpowiedź. `absent` oznacza jego brak.
+`present` means an expected document was in the context, not necessarily
+that the passage contained an answer. `absent` means it was missing.
 
 | Embeddings | Answer model | Question | Expected document | Observed outcome |
 |---|---|---|---|---|

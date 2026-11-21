@@ -1,3 +1,70 @@
+# mini-rag
+
+A plain-Python RAG over IPCC PDFs. The week-1 implementation is the reference
+for the Haystack comparison in week 2. See [evaluation results](evaluation_results.md)
+for measured results and known limitations.
+
+## How the current system works
+
+### Prepare the corpus once
+
+```mermaid
+flowchart LR
+    Manifest["Document manifest + PDFs"] -->|"layout blocks and physical pages"| Parse["PDF parsing"]
+    Parse -->|"document-wide sections"| Chunk["Section chunking: 600 / 90, minimum 150"]
+    Chunk -->|"Chunk JSONL"| Chunks[("Shared chunks + ingest manifest")]
+    Chunks -->|"chunk text in batches"| Embed["Embedding API: OpenAI or Ollama"]
+    Embed -->|"normalized float32 vectors"| Index[("Model-specific matrix + embedding manifest")]
+    Chunks -.->|"hash and row alignment"| Index
+```
+
+The stored matrix row `i` belongs to chunk `i`. Loading validates hashes,
+shape and manifests. An unchanged, valid embedding cache avoids document
+embedding calls. Indexes, PDFs and logs are local artifacts, not tracked files.
+
+### Answer a question
+
+```mermaid
+flowchart TD
+    Q["Question + selected index"] --> Load["Load and validate cached index"]
+    Load --> QE["Embed query with the manifest's model"]
+    QE --> Search["Raw cosine top-k; optional min-score filter"]
+    Search --> Has{"Any retained chunks?"}
+    Has -->|"no"| Empty["Local refusal; no generation call"]
+    Has -->|"yes"| Context["Numbered context + ref-to-Chunk map"]
+    Context --> Gen["Answer model returns structured LlmAnswer"]
+    Gen --> Resolve["Resolve inline markers; validate references"]
+    Resolve --> Final["Validate final Answer schema"]
+    Final --> Output["Answer + citations or refusal + retained chunk IDs"]
+    Empty --> Output
+    Resolve -->|"unknown reference"| Error["Explicit error; never invent source metadata"]
+```
+
+The answer model receives text and numbered references. Application code copies
+citation document IDs and inclusive physical page ranges from the retrieved
+chunks. An explicit refusal has no citations, but keeps retained chunk IDs.
+The CLI renders Rich output by default or `Answer` JSON with `--json-output`.
+
+### Measure without hiding failures
+
+```mermaid
+flowchart LR
+    Questions["30 benchmark questions"] --> Smoke["Retrieval smoke: query embeddings + top-k"]
+    Questions --> Baseline["Answer baseline: retrieve + generate + validate"]
+    Cache[("Existing chunks and index")] --> Smoke
+    Cache --> Baseline
+    Smoke --> SR["Ranked chunks + document hit@5"]
+    Baseline --> BR["Answer records + refusals + errors + latency"]
+    SR --> Review["Offline recomputation and source checks"]
+    BR --> Review
+    Review --> Report["Evaluation report + follow-up issues"]
+```
+
+Saved results are versioned. Baseline output refuses accidental overwrites.
+Document hits measure source-document matches, not answer correctness or
+passage relevance. Offline tests use fake clients; running smoke or baseline
+against a real endpoint can make model calls.
+
 ## Running the project
 
 > [!NOTE]

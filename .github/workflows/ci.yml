@@ -43,15 +43,23 @@ jobs:
       - name: Mypy
         run: python -m mypy src
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Learning automation contract tests
+        run: node --test .github/scripts/learning-workflow.test.cjs
+
   test:
-    name: Unit tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Unit tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         # Lower bound from requires-python and the pinned dev version.
         python-version: ["3.12", "3.13"]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
 

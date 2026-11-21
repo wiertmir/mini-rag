@@ -101,7 +101,7 @@ an Actions secret. Review the session log and resulting test diff.
 The completed plain-Python implementation is preserved in branch
 [`week-01-own-implementation`](https://github.com/wiertmir/mini-rag/tree/week-01-own-implementation)
 and annotated tag
-[`week-01-own-implementation-v1`](https://github.com/wiertmir/mini-rag/releases/tag/week-01-own-implementation-v1).
+[`week-01-own-implementation-v1`](https://github.com/wiertmir/mini-rag/tree/week-01-own-implementation-v1).
 Both include the README diagrams added before creating either ref. The archive
 tag should not move. Local ignored PDFs/indexes are not included; manifests,
 configuration and saved result fingerprints describe the experiment.

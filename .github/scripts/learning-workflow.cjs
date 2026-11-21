@@ -14,6 +14,7 @@ function doneWhen(body) {
 }
 
 function managedBody(issue, oldBody = '') {
+  oldBody = oldBody || '';
   const completed = new Set(
     (oldBody.split(START)[1]?.split(END)[0] || '').split('\n')
       .filter(line => /^- \[[xX]\] /.test(line)).map(line => line.slice(6))

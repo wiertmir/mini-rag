@@ -125,3 +125,10 @@ test('prompt requires evidence and preserves human review', () => {
     assert.ok(text.includes(clause));
   }
 });
+
+
+test('a manually opened PR with a null body receives the issue checklist', () => {
+  const body = managedBody(issue, null);
+  assert.ok(body.includes('Closes #82'));
+  assert.ok(body.includes('- [ ] Exact row parity'));
+});

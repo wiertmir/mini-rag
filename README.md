@@ -712,3 +712,12 @@ python eval/run_baseline.py --questions data/questions.jsonl --index-dir=index/q
 
 Without `--output-dir`, the default portable model directory is used. If results
 already exist there, the command refuses to overwrite them unless given `--force`.
+
+## Learning workflow and week-1 archive
+
+See [GitHub learning workflow](docs/github-workflow.md) for issue-linked draft
+PRs, agent-owned tests, evidence checklists and required one-time setup.
+The week-1 snapshot is preserved as branch `week-01-own-implementation` and
+annotated tag `week-01-own-implementation-v1`, including the diagrams above.
+The snapshot excludes ignored local indexes and PDFs. Keep the archive unchanged;
+start new learning steps from current `main` using the issue's Create branch action.

@@ -1,0 +1,41 @@
+name: Learning test agent
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: learning-agent-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  request:
+    if: github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.actor.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check user-token configuration
+        id: token
+        env:
+          AGENT_TOKEN: ${{ secrets.LEARNING_AGENT_TOKEN }}
+        run: |
+          if [ -z "$AGENT_TOKEN" ]; then
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Copilot dispatch is not enabled. Add the repository-scoped LEARNING_AGENT_TOKEN user token; see docs/github-workflow.md.'
+          else
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/github-script@v8
+        if: steps.token.outputs.enabled == 'true'
+        with:
+          github-token: ${{ secrets.LEARNING_AGENT_TOKEN }}
+          script: |
+            const {requestAgent} = require('./.github/scripts/learning-workflow.cjs');
+            await requestAgent({github, context, core});

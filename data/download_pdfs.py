@@ -3,6 +3,7 @@
 
 import csv
 import pathlib
+import re
 import time
 import urllib.error
 import urllib.request
@@ -15,6 +16,10 @@ with (BASE / "documents.csv").open(encoding="utf-8", newline="") as f:
     docs = list(csv.DictReader(f))
 
 for doc in docs:
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", doc["id"]) or re.fullmatch(
+        r"CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]", doc["id"], re.IGNORECASE
+    ):
+        raise ValueError("Document ID is not a portable filename")
     dest = OUT / (doc["id"] + ".pdf")
     if dest.exists() and dest.read_bytes()[:4] == b"%PDF":
         print("SKIP", dest.name)

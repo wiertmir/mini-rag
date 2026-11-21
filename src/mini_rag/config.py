@@ -16,7 +16,14 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Final, Self, cast
 
-from pydantic import Field, PrivateAttr, ValidationError, create_model, model_validator
+from pydantic import (
+    Field,
+    PrivateAttr,
+    ValidationError,
+    create_model,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import (
     BaseSettings,
     CliImplicitFlag,
@@ -30,6 +37,7 @@ from pydantic_settings import (
 from rich_argparse import RichHelpFormatter
 
 from mini_rag.pages import PageRange, parse_page_ranges
+from mini_rag.paths import portable_path
 
 CONFIG_FILE_ENV_VAR: Final[str] = "MINI_RAG_CONFIG"
 DEFAULT_EMBEDDING_MODEL: Final[str] = "text-embedding-3-small"
@@ -57,6 +65,11 @@ class Config(BaseSettings):
     log_folder: CliSuppress[Path] = Field(
         default=Path("logs"), description="directory for log files"
     )
+
+    @field_validator("*", mode="after")
+    @classmethod
+    def _portable_paths(cls, value: Any) -> Any:
+        return portable_path(value) if isinstance(value, Path) else value
 
     @classmethod
     def settings_customise_sources(

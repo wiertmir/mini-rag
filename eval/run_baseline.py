@@ -10,6 +10,7 @@ from mini_rag.config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL
 from mini_rag.evaluation import baseline_evaluation_loop
 from mini_rag.helpers import ErrorHandler
 from mini_rag.llm import OpenAIAnswerGenerator, OpenAIRetriever
+from mini_rag.paths import portable_path, safe_filename
 
 logger = rich_struct.log.get_logger()
 
@@ -52,7 +53,7 @@ async def _run_async(argv: Sequence[str] | None = None):
     args = parser.parse_args(argv)
 
     questions_path = Path(args.questions)
-    index_dir = Path(args.index_dir)
+    index_dir = portable_path(Path(args.index_dir))
     logger.info(
         "Starting evaluation script with questions in '{}' and index in '{}'. LLM: {}",
         questions_path,
@@ -61,7 +62,7 @@ async def _run_async(argv: Sequence[str] | None = None):
     )
     output_dir: Path | None = None
     if args.output_dir:
-        output_dir = Path(args.output_dir)
+        output_dir = portable_path(Path(args.output_dir))
         logger.info("...and output_dir='{}'", output_dir)
 
     def get_openai_client(run_locally: bool) -> AsyncOpenAI:
@@ -79,7 +80,11 @@ async def _run_async(argv: Sequence[str] | None = None):
         generator = OpenAIAnswerGenerator(client, llm_model)
 
         if output_dir is None:
-            output_dir = Path("eval/results") / embedding_manifest.model / llm_model
+            output_dir = (
+                Path("eval/results")
+                / safe_filename(embedding_manifest.model)
+                / safe_filename(llm_model)
+            )
             logger.info(
                 "Based on selected index directory and model, the output directory is {}",
                 output_dir,

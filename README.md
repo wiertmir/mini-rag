@@ -6,64 +6,138 @@ for measured results and known limitations.
 
 ## How the current system works
 
-### Prepare the corpus once
+These diagrams describe the implemented plain-Python system, not a task order.
+Arrows name the data exchanged. Boxes inside a boundary share a location;
+cylinders are files on disk. Haystack is planned for week 2, not part of this
+runtime yet.
+
+### Components and connections
 
 ```mermaid
 flowchart LR
-    Manifest["Document manifest + PDFs"] -->|"layout blocks and physical pages"| Parse["PDF parsing"]
-    Parse -->|"document-wide sections"| Chunk["Section chunking: 600 / 90, minimum 150"]
-    Chunk -->|"Chunk JSONL"| Chunks[("Shared chunks + ingest manifest")]
-    Chunks -->|"chunk text in batches"| Embed["Embedding API: OpenAI or Ollama"]
-    Embed -->|"normalized float32 vectors"| Index[("Model-specific matrix + embedding manifest")]
-    Chunks -.->|"hash and row alignment"| Index
+    User["User / terminal"]
+    subgraph App["Local Python process: mini_rag"]
+        CLI["ask.py: CLI and ask_async"]
+        Ret["llm.py: OpenAIRetriever"]
+        Search["retrieve.py: cosine search"]
+        Ctx["prompts.py: build_context"]
+        Gen["llm.py: OpenAIAnswerGenerator"]
+        Resolve["ask.py: resolve_citations + Answer validation"]
+        RAM["RAM: chunk list + normalized NumPy matrix"]
+        Load["storage.py: validated index loader"]
+    end
+    Disk[("Local disk: index/ chunks, vectors and manifests")]
+    subgraph API["Model endpoint: OpenAI; local Ollama in evaluation runs"]
+        Emb["Embedding model"]
+        LLM["Answer model"]
+    end
+    User -->|"question + CLI settings"| CLI
+    Disk -->|"JSONL + NPY + JSON"| Load
+    Load -->|"validated chunks and matrix"| RAM
+    CLI -->|"question, top_k"| Ret
+    Ret -->|"question text; manifest model ID"| Emb
+    Emb -->|"query vector"| Ret
+    Ret -->|"query vector, top_k"| Search
+    RAM -->|"matrix and Chunk records"| Search
+    Search -->|"ranked SearchResult list"| Ret
+    Ret -->|"results after optional min_score filter"| CLI
+    CLI -->|"retained SearchResult list"| Ctx
+    Ctx -->|"numbered text + ref-to-Chunk map"| CLI
+    CLI -->|"question + context"| Gen
+    Gen -->|"system prompt + question + numbered excerpts"| LLM
+    LLM -->|"structured LlmAnswer"| Gen
+    Gen -->|"LlmAnswer"| CLI
+    CLI -->|"LlmAnswer + local ref map"| Resolve
+    Resolve -->|"validated citations"| CLI
+    CLI -->|"Answer: text, citations, refusal, chunk IDs"| User
 ```
 
-The stored matrix row `i` belongs to chunk `i`. Loading validates hashes,
-shape and manifests. An unchanged, valid embedding cache avoids document
-embedding calls. Indexes, PDFs and logs are local artifacts, not tracked files.
+Retrieval and citation resolution are local Python operations, not model calls.
+The model receives numbered excerpts including source labels; it returns reference
+numbers, not authoritative source metadata. `resolve_citations` copies document
+IDs and inclusive physical page ranges from the local `Chunk` records. Unknown
+references raise an error. An empty retained result list returns a local refusal
+without an answer-model call; query embedding still requires the embedding endpoint.
+The CLI renders Rich output or emits `Answer` JSON with `--json-output`.
 
-### Answer a question
-
-```mermaid
-flowchart TD
-    Q["Question + selected index"] --> Load["Load and validate cached index"]
-    Load --> QE["Embed query with the manifest's model"]
-    QE --> Search["Raw cosine top-k; optional min-score filter"]
-    Search --> Has{"Any retained chunks?"}
-    Has -->|"no"| Empty["Local refusal; no generation call"]
-    Has -->|"yes"| Context["Numbered context + ref-to-Chunk map"]
-    Context --> Gen["Answer model returns structured LlmAnswer"]
-    Gen --> Resolve["Resolve inline markers; validate references"]
-    Resolve --> Final["Validate final Answer schema"]
-    Final --> Output["Answer + citations or refusal + retained chunk IDs"]
-    Empty --> Output
-    Resolve -->|"unknown reference"| Error["Explicit error; never invent source metadata"]
-```
-
-The answer model receives text and numbered references. Application code copies
-citation document IDs and inclusive physical page ranges from the retrieved
-chunks. An explicit refusal has no citations, but keeps retained chunk IDs.
-The CLI renders Rich output by default or `Answer` JSON with `--json-output`.
-
-### Measure without hiding failures
+### Where corpus information lives
 
 ```mermaid
 flowchart LR
-    Questions["30 benchmark questions"] --> Smoke["Retrieval smoke: query embeddings + top-k"]
-    Questions --> Baseline["Answer baseline: retrieve + generate + validate"]
-    Cache[("Existing chunks and index")] --> Smoke
-    Cache --> Baseline
-    Smoke --> SR["Ranked chunks + document hit@5"]
-    Baseline --> BR["Answer records + refusals + errors + latency"]
-    SR --> Review["Offline recomputation and source checks"]
-    BR --> Review
-    Review --> Report["Evaluation report + follow-up issues"]
+    subgraph Disk["Local disk"]
+        Source[("data/documents.csv + data/pdfs/*.pdf")]
+        Chunks[("index/chunks_600_90.jsonl: text + source metadata")]
+        IM[("index/ingest_manifest_600_90.json: chunking provenance")]
+        Matrix[("index/MODEL/embeddings.npy: normalized float32 rows")]
+        EM[("index/MODEL/embedding_manifest.json: model, shape, chunks_path, hash")]
+    end
+    subgraph Python["Local Python processes"]
+        Ingest["ingest.py + pdf_parsers.py + chunk.py"]
+        Embed["embed.py: batches, normalization and cache checks"]
+        Load["storage.py: load_index_async"]
+        RAM["RAM: LoadedIndex for retrieval"]
+    end
+    Endpoint["Embedding endpoint: model API"]
+    Source -->|"PDF blocks, physical pages, document metadata"| Ingest
+    Ingest -->|"Chunk records; section-based 600/90, minimum 150"| Chunks
+    Ingest -->|"parameters and provenance"| IM
+    Chunks -->|"chunk text"| Embed
+    Embed -->|"text batches + model ID"| Endpoint
+    Endpoint -->|"vectors"| Embed
+    Embed -->|"matrix"| Matrix
+    Embed -->|"input hash + matrix identity"| EM
+    Chunks -->|"ordered Chunk records"| Load
+    Matrix -->|"ordered vector rows"| Load
+    EM -->|"hash, shape and chunk-file pointer"| Load
+    IM -->|"ingest provenance"| Load
+    Load -->|"validated matrix + chunks + manifests"| RAM
 ```
 
-Saved results are versioned. Baseline output refuses accidental overwrites.
-Document hits measure source-document matches, not answer correctness or
-passage relevance. Offline tests use fake clients; running smoke or baseline
-against a real endpoint can make model calls.
+`MODEL` is a portable directory name such as `text-embedding-3-small`; API model
+IDs retain their original spelling. Matrix row `i` belongs to chunk `i`.
+The loader validates the chunk hash, vector dtype/shape and row count and loads
+the adjacent ingest manifest. A valid unchanged embedding cache avoids document
+embedding calls. PDFs, indexes and logs are local ignored artifacts, not GitHub
+storage. There is no separate vector database in the current implementation:
+search uses the matrix loaded into the Python process.
+
+### Evaluation data and stored evidence
+
+```mermaid
+flowchart LR
+    subgraph Inputs["Versioned inputs / local corpus cache"]
+        Q[("data/questions.jsonl: 30 benchmark questions")]
+        Cache[("index/: shared chunks + model-specific vectors + manifests")]
+    end
+    subgraph Runtime["Local evaluation process"]
+        Smoke["eval/retrieval_smoke.py: retrieval only"]
+        Baseline["eval/run_baseline.py + evaluation.py: full answer path"]
+    end
+    API["Model endpoint: query embeddings and optional answer generation"]
+    subgraph Results["Versioned result artifacts under eval/results/"]
+        SR[("retrieval_smoke.jsonl + retrieval_smoke_summary.json")]
+        BR[("baseline.jsonl + baseline_summary.json")]
+    end
+    Report["evaluation_results.md: interpretation and limitations"]
+    Q -->|"question IDs, text and expected documents"| Smoke
+    Q -->|"same benchmark contract"| Baseline
+    Cache -->|"validated index and provenance"| Smoke
+    Cache -->|"validated index and provenance"| Baseline
+    Smoke -->|"question text"| API
+    API -->|"query vectors"| Smoke
+    Baseline -->|"questions and retrieved context"| API
+    API -->|"query vectors and structured model responses"| Baseline
+    Smoke -->|"rankings, document hits and index fingerprint"| SR
+    Baseline -->|"answers, citations, refusals, errors, latency and fingerprints"| BR
+    SR -->|"saved retrieval evidence"| Report
+    BR -->|"saved answer evidence"| Report
+```
+
+The report is maintained from saved evidence; it is not automatically produced
+by the baseline script. Document hits measure source-document matches, not answer
+correctness or passage relevance. Baseline output refuses accidental overwrites;
+use a new directory for a new experiment. Offline tests use fake clients, while
+live evaluation makes model calls. See the commands below for exact paths and flags.
 
 ## Running the project
 

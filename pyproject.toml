@@ -7,18 +7,19 @@ name = "mini-rag"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    "aiofiles",
-    "asyncstdlib",
-    "numpy",
-    "openai",
-    "pydantic",
-    "pydantic-settings",
-    "pymupdf",
-    "pypdf",
-    "rich",
-    "rich-argparse",
-    "rich-struct[log]",
-    "tiktoken",
+    "aiofiles==25.1",
+    "asyncstdlib==3.14",
+    "haystack-ai==3.5",
+    "numpy==2.5.5",
+    "openai==3.60",
+    "pydantic==2.14.4",
+    "pydantic-settings==2.16.3",
+    "pymupdf==2.2",
+    "pypdf==7.2",
+    "rich==15.0",
+    "rich-argparse==1.8",
+    "rich-struct[log]==0.16.1",
+    "tiktoken==0.14",    
 ]
 
 [project.optional-dependencies]

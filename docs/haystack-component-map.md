@@ -44,3 +44,30 @@ the smoke test does not claim to implement or validate the future adapter.
 CI logs are evidence for installation and the fast gate at their recorded commit.
 They do not prove which commands a person previously typed locally. No narrative
 or screenshots are required from Mirek for results that tests can reproduce.
+
+## Demo serialization boundary (#84)
+
+`components.build_pipeline()` now constructs the existing graph without running
+it: two `TextStats` instances and one `WhitespaceNormalizer`, with the normalized
+text connected to the downstream statistics instance. The original demo calls
+this factory. No corpus conversion or RAG adapter is introduced.
+
+`roundtrip.build_save_run(text, path)` writes YAML through `Pipeline.dump(file)`
+and returns the original run result as sorted JSON. `roundtrip.load_run(text,
+path)` uses `Pipeline.load(file, allowed_modules=["mini_rag.haystack_pipeline.components"],
+unsafe=False)` and returns the loaded graph's result. These file-based APIs wrap
+the same serialization boundary as `dumps`/`loads`; using them is not a contract
+violation. The file stores class paths, empty initialization parameters and the
+socket connection, not runtime text or results. A missing/broken file fails,
+without constructing a replacement graph.
+
+The offline tests cover separate interpreter runs, exact final/intermediate
+values, a factory failure sentinel in load mode, rejection without the module
+allowance, and parsed YAML contents. They also distinguish a successful JSON diff
+from two failed commands producing empty output: each process must exit zero.
+
+At the reviewed implementation, CLI text is a required positional argument.
+The explicit-input round trip works, but the fixed-input commands in issue #84
+omit that argument and fail. This remains a review finding, not a claim that
+all #84 acceptance criteria have passed. No custom serialization hooks are
+needed by the current stateless components.

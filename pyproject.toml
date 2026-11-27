@@ -45,4 +45,5 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [tool.ruff.lint]
+extend-select = ["I"]
 ignore = ["PLE1205"]

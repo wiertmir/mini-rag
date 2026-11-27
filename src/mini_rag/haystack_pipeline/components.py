@@ -1,5 +1,5 @@
-from collections.abc import Sequence
 import re
+from collections.abc import Sequence
 
 from haystack import Pipeline, component
 from rich_struct import print_obj

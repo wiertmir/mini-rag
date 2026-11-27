@@ -278,14 +278,14 @@ def test_roundtrip_helpers_preserve_results_and_only_serialize_configuration(
 ):
     import json
 
-    import yaml
+    from haystack.marshal.yaml import YamlMarshaller
 
     path = tmp_path / "pipeline.yaml"
     before = roundtrip_offline.build_save_run("One   two\nthree", path)
     after = roundtrip_offline.load_run("One   two\nthree", path)
     assert before == after
     assert json.loads(before) == expected_roundtrip_result()
-    saved = yaml.safe_load(path.read_text(encoding="utf-8"))
+    saved = YamlMarshaller().unmarshal(path.read_text(encoding="utf-8"))
     assert set(saved["components"]) == {"normalizer", "text_stats", "normalized_text_stats"}
     for name, component in saved["components"].items():
         kind = "WhitespaceNormalizer" if name == "normalizer" else "TextStats"

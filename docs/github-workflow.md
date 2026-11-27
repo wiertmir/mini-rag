@@ -6,34 +6,48 @@ No workflow merges a PR or treats a checked box as a human approval.
 
 ## Everyday flow
 
+Week 2 uses a weekly integration branch. See [Week 2 release contract](week-02-release.md)
+for its scope, review gates and handoff. The completed Week 1 archive is immutable.
+
 ```mermaid
-flowchart TD
-    Issue["Small issue with a Done when checklist"] --> Branch["Create branch from the issue: number-title"]
-    Branch --> Push["Mirek pushes an implementation commit"]
-    Push --> PR["Learning PR: create draft or refresh checklist"]
-    PR --> CI["CI: Linux and Windows, Python 3.12 and 3.13"]
-    CI --> Config{"Agent user token configured?"}
-    Config -->|"no"| Manual["Visible setup warning; manual Copilot request remains available"]
-    Config -->|"yes, current human commit"| Agent["Copilot: useful offline tests + evidence assessment"]
-    Agent --> Changes["Test-only commit and checklist evidence"]
-    Changes --> Human["Mirek reviews changes and approves CI when GitHub requires it"]
-    Human --> Review["Review and merge by a human"]
+sequenceDiagram
+    actor Mirek
+    participant Issue as Week 2 issue
+    participant Task as Issue branch
+    participant Week as week-02-haystack
+    participant CI as CI and reviewer
+    participant Main as main
+    Mirek->>Issue: Create branch from week-02-haystack
+    Issue->>Task: Start at current weekly tip
+    Mirek->>Task: Push implementation
+    Task->>CI: Draft PR targeting week-02-haystack
+    CI-->>Task: Tests, evidence and review findings
+    Mirek->>Week: Merge passing task PR
+    CI->>Issue: Verify merge and close card explicitly
+    Note over Week,Main: No per-task merge to main
+    Week->>CI: Weekly acceptance and frozen comparison artifacts
+    Mirek->>Main: Merge reviewed weekly release PR
 ```
 
 1. Use **Create branch** in an open task issue. Keep its leading number, e.g.
    `82-w02-d1-1-pin-haystack`. Work on one small task per PR, branching from
-   current `main`; do not use the archive branch for ongoing work.
+   current `week-02-haystack` for Week 2; select that source explicitly in the
+   GitHub dialog. Do not use the archive branch for ongoing work.
 2. Creating the branch at the current base tip does not open an empty PR.
-   The first owner push with a commit ahead of `main` creates a **draft PR**.
+   The first owner push with a commit ahead of its configured integration base creates a **draft PR**.
    The workflow copies the issue's `## Done when` checkboxes and links it with
-   `Closes #N`. It does not write a claim that the implementation is complete.
+   `Refs #N` for Week 2. Its base is `week-02-haystack`, not `main`.
+   GitHub closing keywords only close issues on the default branch: after a
+   weekly task PR is merged and evidence is verified, Szpaner closes its card
+   explicitly. A push or a merge alone is not proof of completion.
 3. Later owner pushes refresh that PR instead of creating another. Matching
    checked criteria and author text outside the managed block are preserved.
    New criteria start unchecked. Renaming a criterion requires reassessment.
 4. CI runs offline Python tests on Linux and Windows with Python 3.12 and 3.13;
    lint/types and Node workflow contract tests run on Linux. Because a PR
    created by `GITHUB_TOKEN` does not trigger another PR workflow, creation
-   explicitly dispatches CI on the task branch. Later human pushes use normal PR CI.
+   explicitly dispatches CI on the task branch. Later human pushes use normal PR CI. CI also runs on task PRs targeting
+   `week-02-haystack` and on pushes to that integration branch.
 5. After CI completes (pass or fail), the agent dispatcher checks that the
    branch/PR head is still that run's commit, belongs to this repository and
    came from the owner. It requests at most one Copilot assessment per head SHA.
@@ -51,6 +65,26 @@ flowchart TD
 A rapid sequence of pushes can queue follow-up requests while Copilot is still
 working. The agent must reassess the latest head and never force-push. Its
 checklist assessment remains reviewable evidence, not a deterministic proof.
+
+## Base selection and weekly handoff
+
+`.github/learning-releases.json` lists only prepared weekly integrations and
+explicit issue numbers. Week 2 cards #22–#26 and #82–#99 target
+`week-02-haystack`; unrelated issues retain the repository default base. The
+trusted dispatcher reads this file from the default branch, not from issue text
+or the learner's branch. A missing weekly branch is an error, not a reason to
+silently send a learning PR to `main`. The agent dispatcher rejects a weekly
+PR aimed at the wrong base.
+
+Infrastructure updates to this dispatcher need a separate reviewed PR to `main`;
+they do not mark a learning week accepted. Until that PR is merged, select the
+weekly base manually rather than relying on the old draft-PR automation.
+
+Do not pre-create later weekly branches or rewrite later cards. At the verified
+closeout of the current week, Szpaner prepares **only the next week**: create its
+integration branch from the accepted `main` commit, update that week's cards and
+the trusted issue/base mapping, and verify CI targets. No workflow auto-merges a
+weekly release or accepts it just because an issue was closed.
 
 ## One-time setup and current limits
 

@@ -1,11 +1,11 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {issueNumber, doneWhen, managedBody, agentPrompt, syncPullRequest, requestAgent} = require('./learning-workflow.cjs');
+const {baseForIssue, issueNumber, doneWhen, managedBody, agentPrompt, syncPullRequest, requestAgent} = require('./learning-workflow.cjs');
 
 const issue = {number: 82, state: 'open', title: 'Keep vectors aligned', html_url: 'https://github.com/test/repo/issues/82',
   body: '## Why\nUseful.\n\n## Done when\n- [ ] Exact row parity\n- [ ] Offline tests pass\n\n## Notes\n- [ ] Not a criterion'};
 const pr = {number: 90, body: '', html_url: 'https://github.com/test/repo/pull/90',
-  head: {ref: '82-keep-vectors-aligned', sha: 'abc'}, base: {repo: {full_name: 'test/repo'}}};
+  head: {ref: '82-keep-vectors-aligned', sha: 'abc'}, base: {ref: 'week-02-haystack', repo: {full_name: 'test/repo'}}};
 
 function harness() {
   const calls = [];
@@ -64,8 +64,11 @@ test('first real owner push opens a draft, links the issue and explicitly dispat
   const h = harness(); await syncPullRequest(h);
   const created = h.calls.find(([name]) => name === 'create')[1];
   assert.equal(created.draft, true);
-  assert.equal(created.base, 'main');
-  assert.ok(created.body.includes('Closes #82'));
+  assert.equal(created.base, 'week-02-haystack');
+  assert.equal(h.calls.find(([name]) => name === 'compare')[1].basehead, 'week-02-haystack...82-keep-vectors-aligned');
+  assert.ok(created.body.includes('Refs #82'));
+  assert.ok(created.body.includes('closes the card explicitly'));
+  assert.ok(!created.body.includes('Closes #82'));
   assert.ok(created.body.includes('- [ ] Exact row parity'));
   assert.equal(h.calls.find(([name]) => name === 'dispatch')[1].ref, pr.head.ref);
 });
@@ -131,4 +134,47 @@ test('a manually opened PR with a null body receives the issue checklist', () =>
   const body = managedBody(issue, null);
   assert.ok(body.includes('Closes #82'));
   assert.ok(body.includes('- [ ] Exact row parity'));
+});
+
+
+test('only explicitly prepared Week 2 cards use the weekly base', () => {
+  for (const number of [22, 23, 24, 25, 26, 82, 83, 99]) {
+    assert.equal(baseForIssue(number, 'main'), 'week-02-haystack');
+  }
+  for (const number of [1, 21, 27, 81, 100]) {
+    assert.equal(baseForIssue(number, 'main'), 'main');
+  }
+});
+
+test('non-week-2 cards retain the default base and closing keyword', async () => {
+  const h = harness(); h.state.issue = {...issue, number: 7};
+  h.context.payload.ref = 'refs/heads/7-other-task';
+  await syncPullRequest(h);
+  const created = h.calls.find(([name]) => name === 'create')[1];
+  assert.equal(created.base, 'main');
+  assert.ok(created.body.includes('Closes #7'));
+});
+
+test('weekly refresh preserves checked evidence and author text', () => {
+  const options = {base: 'week-02-haystack', defaultBranch: 'main'};
+  const old = 'Author notes\n' + managedBody(issue).replace('- [ ] Exact row parity', '- [x] Exact row parity');
+  const updated = managedBody(issue, old, options);
+  assert.ok(updated.startsWith('Author notes'));
+  assert.ok(updated.includes('- [x] Exact row parity'));
+  assert.ok(updated.includes('Refs #82'));
+  assert.ok(!updated.includes('Closes #82'));
+});
+
+test('a weekly PR aimed at main cannot dispatch the test agent', async () => {
+  const h = harness(); h.state.pulls = [{...pr, base: {...pr.base, ref: 'main'}}];
+  await requestAgent(h);
+  assert.ok(!h.calls.some(([name]) => ['assign', 'comment'].includes(name)));
+});
+
+
+test('an existing wrong-base PR is retargeted rather than duplicated', async () => {
+  const h = harness(); h.state.pulls = [{...pr, base: {...pr.base, ref: 'main'}}];
+  await syncPullRequest(h);
+  assert.equal(h.calls.find(([name]) => name === 'update')[1].base, 'week-02-haystack');
+  assert.ok(!h.calls.some(([name]) => name === 'create'));
 });

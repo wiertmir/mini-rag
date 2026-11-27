@@ -199,8 +199,8 @@ Importing modules or collecting tests does not create log files.
 
 ### Continuous integration
 
-- **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and every
-  pull request: `ruff check`, `ruff format --check`, `mypy src`, and
+- **CI** (`.github/workflows/ci.yml`) runs on pushes to `main` and `week-02-haystack`, and pull requests
+  targeting either branch: `ruff check`, `ruff format --check`, `mypy src`, and
   `pytest -m "not acceptance and not live"` on Python 3.12 and 3.13. Reproduce locally:
 
   ```bash
@@ -794,4 +794,28 @@ PRs, agent-owned tests, evidence checklists and required one-time setup.
 The week-1 snapshot is preserved as branch `week-01-own-implementation` and
 annotated tag `week-01-own-implementation-v1`, including the diagrams above.
 The snapshot excludes ignored local indexes and PDFs. Keep the archive unchanged;
-start new learning steps from current `main` using the issue's Create branch action.
+start Week 2 issue branches from current `week-02-haystack`, selecting it explicitly
+in the issue's **Create branch** dialog, and target task PRs to that same branch.
+After evidence-based weekly acceptance, one release PR integrates the week into
+`main`. See the [Week 2 release contract](docs/week-02-release.md).
+
+```mermaid
+gitGraph
+    commit id: "accepted baseline"
+    branch week-02-haystack
+    checkout week-02-haystack
+    branch issue-83
+    commit id: "offline graph"
+    checkout week-02-haystack
+    merge issue-83 id: "reviewed task"
+    commit id: "remaining reviewed tasks"
+    commit id: "weekly acceptance"
+    checkout main
+    merge week-02-haystack id: "accepted Week 2" tag: "week-02-haystack-v1"
+```
+
+This diagram describes the intended release model, not current commit history.
+The dependency-only #82 / PR #101 was already merged to `main` before switching
+models; the Week 2 branch includes it. No history was rewritten. Subsequent Week 2
+learning work stays on its integration branch until weekly release acceptance.
+Later weekly branches/cards are prepared only when the previous week closes.

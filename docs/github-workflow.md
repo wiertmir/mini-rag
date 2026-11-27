@@ -17,7 +17,7 @@ sequenceDiagram
     participant Week as week-02-haystack
     participant CI as CI and reviewer
     participant Main as main
-    Mirek->>Issue: Create branch; select week-02-haystack as source
+    Mirek->>Issue: Create branch from week-02-haystack
     Issue->>Task: Start at current weekly tip
     Mirek->>Task: Push implementation
     Task->>CI: Draft PR targeting week-02-haystack

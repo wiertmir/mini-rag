@@ -26,13 +26,13 @@ Execution errors remain in the denominator of 28.
 
 | Embeddings | Answer model / records | Citation hits | Answerable refusals | Errors | Mean s | Median s | Max s |
 |---|---|---:|---:|---:|---:|---:|---:|
-| qwen3-embedding:4b | [gemma4:12b-q8-8k](eval/results/qwen3-embedding_4b/gemma4_12b-q8-8k/baseline.jsonl) | 25/28 | 2 | 0 | 35.99 | 34.56 | 75.80 |
-| qwen3-embedding:4b | [gemma4:31b](eval/results/qwen3-embedding_4b/gemma4_31b/baseline.jsonl) | 25/28 | 2 | 0 | 81.36 | 78.15 | 134.99 |
-| qwen3-embedding:4b | [qwen3.6:35b](eval/results/qwen3-embedding_4b/qwen3.6_35b/baseline.jsonl) | 24/28 | 2 | 0 | 41.27 | 41.16 | 65.72 |
-| qwen3-embedding:8b | [gemma4:12b-q8-8k](eval/results/qwen3-embedding_8b/gemma4_12b-q8-8k/baseline.jsonl) | 25/28 | 1 | 0 | 34.04 | 31.89 | 72.30 |
-| qwen3-embedding:8b | [gemma4:31b](eval/results/qwen3-embedding_8b/gemma4_31b/baseline.jsonl) | 22/28 | 2 | 0 | 90.93 | 89.09 | 158.87 |
-| qwen3-embedding:8b | [qwen3.6:35b](eval/results/qwen3-embedding_8b/qwen3.6_35b/baseline.jsonl) | 23/28 | 2 | 1 | 64.61 | 58.67 | 118.42 |
-| text-embedding-3-small | [gpt-5.4-mini](eval/results/text-embedding-3-small/gpt-5.4-mini/baseline.jsonl) | 25/28 | 0 | 0 | 2.66 | 2.55 | 4.19 |
+| qwen3-embedding:4b | [gemma4:12b-q8-8k](results/qwen3-embedding_4b/gemma4_12b-q8-8k/baseline.jsonl) | 25/28 | 2 | 0 | 35.99 | 34.56 | 75.80 |
+| qwen3-embedding:4b | [gemma4:31b](results/qwen3-embedding_4b/gemma4_31b/baseline.jsonl) | 25/28 | 2 | 0 | 81.36 | 78.15 | 134.99 |
+| qwen3-embedding:4b | [qwen3.6:35b](results/qwen3-embedding_4b/qwen3.6_35b/baseline.jsonl) | 24/28 | 2 | 0 | 41.27 | 41.16 | 65.72 |
+| qwen3-embedding:8b | [gemma4:12b-q8-8k](results/qwen3-embedding_8b/gemma4_12b-q8-8k/baseline.jsonl) | 25/28 | 1 | 0 | 34.04 | 31.89 | 72.30 |
+| qwen3-embedding:8b | [gemma4:31b](results/qwen3-embedding_8b/gemma4_31b/baseline.jsonl) | 22/28 | 2 | 0 | 90.93 | 89.09 | 158.87 |
+| qwen3-embedding:8b | [qwen3.6:35b](results/qwen3-embedding_8b/qwen3.6_35b/baseline.jsonl) | 23/28 | 2 | 1 | 64.61 | 58.67 | 118.42 |
+| text-embedding-3-small | [gpt-5.4-mini](results/text-embedding-3-small/gpt-5.4-mini/baseline.jsonl) | 25/28 | 0 | 0 | 2.66 | 2.55 | 4.19 |
 
 All models correctly refused Q29 and Q30 without citations.
 There were no `invalid_citation` errors. One execution error occurred:

@@ -187,3 +187,196 @@ runpy.run_module("mini_rag.haystack_pipeline.components", run_name="__main__")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Non-modified text:" in result.stdout
     assert "Normalized text:" in result.stdout
+
+
+@pytest.fixture
+def roundtrip_offline(monkeypatch: pytest.MonkeyPatch):
+    import os
+    import socket
+
+    monkeypatch.setenv("HAYSTACK_TELEMETRY_ENABLED", "false")
+    for name in os.environ:
+        if name.endswith("API_KEY"):
+            monkeypatch.delenv(name, raising=False)
+
+    def deny(*args, **kwargs):
+        raise AssertionError("Unexpected external client or network access")
+
+    monkeypatch.setattr(socket.socket, "connect", deny)
+    monkeypatch.setattr(socket.socket, "connect_ex", deny)
+    monkeypatch.setattr(socket, "create_connection", deny)
+    monkeypatch.setattr(socket, "getaddrinfo", deny)
+    import openai
+
+    monkeypatch.setattr(openai, "OpenAI", deny)
+    monkeypatch.setattr(openai, "AsyncOpenAI", deny)
+    from mini_rag.haystack_pipeline import roundtrip
+
+    return roundtrip
+
+
+def expected_roundtrip_result():
+    return {
+        "normalizer": {"normalized_text": "One two\nthree"},
+        "text_stats": {"word_count": 3, "line_count": 2, "char_count": 15},
+        "normalized_text_stats": {"word_count": 3, "line_count": 2, "char_count": 13},
+    }
+
+
+def run_roundtrip_cli(args):
+    script = r"""
+import os
+import runpy
+import socket
+import sys
+for key in list(os.environ):
+    if key.endswith("API_KEY"):
+        del os.environ[key]
+os.environ["HAYSTACK_TELEMETRY_ENABLED"] = "false"
+def deny(*args, **kwargs):
+    raise AssertionError("Unexpected external client, network, or load-mode factory call")
+socket.socket.connect = deny
+socket.socket.connect_ex = deny
+socket.create_connection = deny
+socket.getaddrinfo = deny
+import openai
+openai.OpenAI = deny
+openai.AsyncOpenAI = deny
+if "--load" in sys.argv[1:]:
+    import mini_rag.haystack_pipeline.components as components
+    components.build_pipeline = deny
+runpy.run_module("mini_rag.haystack_pipeline.roundtrip", run_name="__main__", alter_sys=True)
+"""
+    return subprocess.run(
+        [sys.executable, "-c", script, *args],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+def test_factory_builds_fresh_graph_without_running_it(roundtrip_offline, monkeypatch, capsys):
+    from haystack import Pipeline
+
+    from mini_rag.haystack_pipeline.components import build_pipeline
+
+    def deny_run(*args, **kwargs):
+        raise AssertionError("The graph factory must not execute the graph")
+
+    monkeypatch.setattr(Pipeline, "run", deny_run)
+    first, second = build_pipeline(), build_pipeline()
+    assert isinstance(first, Pipeline)
+    assert first is not second
+    assert first.get_component("normalizer") is not second.get_component("normalizer")
+    assert capsys.readouterr().out == ""
+
+
+def test_roundtrip_helpers_preserve_results_and_only_serialize_configuration(
+    roundtrip_offline, tmp_path
+):
+    import json
+
+    from haystack.marshal.yaml import YamlMarshaller
+
+    path = tmp_path / "pipeline.yaml"
+    before = roundtrip_offline.build_save_run("One   two\nthree", path)
+    after = roundtrip_offline.load_run("One   two\nthree", path)
+    assert before == after
+    assert json.loads(before) == expected_roundtrip_result()
+    saved = YamlMarshaller().unmarshal(path.read_text(encoding="utf-8"))
+    assert set(saved["components"]) == {"normalizer", "text_stats", "normalized_text_stats"}
+    for name, component in saved["components"].items():
+        kind = "WhitespaceNormalizer" if name == "normalizer" else "TextStats"
+        assert component["type"] == f"mini_rag.haystack_pipeline.components.{kind}"
+        assert component["init_parameters"] == {}
+    assert saved["connections"] == [
+        {"sender": "normalizer.normalized_text", "receiver": "normalized_text_stats.text"}
+    ]
+    assert saved["metadata"] == {}
+    assert not {"text", "input", "result", "results", "api_key", "vectors"}.intersection(saved)
+
+
+def test_load_uses_exact_allowance_without_factory_fallback(
+    roundtrip_offline, tmp_path, monkeypatch
+):
+    import json
+
+    path = tmp_path / "pipeline.yaml"
+    roundtrip_offline.build_save_run("One   two\nthree", path)
+    original_load = roundtrip_offline.Pipeline.load
+    received = []
+
+    def checked_load(file, **kwargs):
+        received.append(kwargs)
+        return original_load(file, **kwargs)
+
+    def deny_factory():
+        raise AssertionError("Load mode must use the file, not rebuild a graph")
+
+    monkeypatch.setattr(roundtrip_offline, "build_pipeline", deny_factory)
+    monkeypatch.setattr(roundtrip_offline.Pipeline, "load", checked_load)
+    assert (
+        json.loads(roundtrip_offline.load_run("One   two\nthree", path))
+        == expected_roundtrip_result()
+    )
+    assert received == [
+        {"allowed_modules": ["mini_rag.haystack_pipeline.components"], "unsafe": False}
+    ]
+
+
+def test_custom_types_cannot_load_without_module_allowance(roundtrip_offline, tmp_path):
+    from haystack import Pipeline
+    from haystack.core.errors import DeserializationError
+
+    path = tmp_path / "pipeline.yaml"
+    roundtrip_offline.build_save_run("One   two\nthree", path)
+    with pytest.raises(DeserializationError):
+        Pipeline.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("broken", [False, True], ids=["missing", "invalid-yaml"])
+def test_missing_or_broken_yaml_fails_without_factory_fallback(
+    roundtrip_offline, tmp_path, monkeypatch, broken
+):
+    from haystack.core.errors import DeserializationError
+
+    path = tmp_path / "pipeline.yaml"
+    if broken:
+        path.write_text("[unclosed", encoding="utf-8")
+
+    def deny_factory():
+        raise AssertionError("Missing/broken YAML must not trigger a fallback graph")
+
+    monkeypatch.setattr(roundtrip_offline, "build_pipeline", deny_factory)
+    with pytest.raises(DeserializationError if broken else FileNotFoundError):
+        roundtrip_offline.load_run("One   two\nthree", path)
+
+
+def test_cli_explicit_input_roundtrip_in_separate_offline_processes(tmp_path):
+    import json
+
+    path = tmp_path / "pipeline.yaml"
+    text = "One   two\nthree"
+    before = run_roundtrip_cli(["--save", str(path), text])
+    assert before.returncode == 0, before.stdout + before.stderr
+    after = run_roundtrip_cli(["--load", str(path), text])
+    assert after.returncode == 0, after.stdout + after.stderr
+    assert json.loads(before.stdout) == expected_roundtrip_result()
+    assert before.stdout == after.stdout
+
+
+@pytest.mark.parametrize("mode", ["--save", "--load"])
+def test_issue84_commands_accept_the_documented_fixed_input(roundtrip_offline, tmp_path, mode):
+    import json
+
+    path = tmp_path / "pipeline.yaml"
+    if mode == "--load":
+        roundtrip_offline.build_save_run("One   two\nthree", path)
+    result = run_roundtrip_cli([mode, str(path)])
+    assert result.returncode == 0, (
+        "Issue #84 documents --save/--load PATH with its fixed fixture and no required "
+        f"positional text argument.\n{result.stderr}"
+    )
+    assert json.loads(result.stdout) == expected_roundtrip_result()

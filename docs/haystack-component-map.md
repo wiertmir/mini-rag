@@ -44,3 +44,33 @@ the smoke test does not claim to implement or validate the future adapter.
 CI logs are evidence for installation and the fast gate at their recorded commit.
 They do not prove which commands a person previously typed locally. No narrative
 or screenshots are required from Mirek for results that tests can reproduce.
+
+## Demo serialization boundary (#84)
+
+`components.build_pipeline()` now constructs the existing graph without running
+it: two `TextStats` instances and one `WhitespaceNormalizer`, with the normalized
+text connected to the downstream statistics instance. The original demo calls
+this factory. No corpus conversion or RAG adapter is introduced.
+
+`roundtrip.build_save_run(text, path)` writes YAML through `Pipeline.dump(file)`
+and returns the original run result as sorted JSON. `roundtrip.load_run(text,
+path)` uses `Pipeline.load(file, allowed_modules=["mini_rag.haystack_pipeline.components"],
+unsafe=False)` and returns the loaded graph's result. These file-based APIs wrap
+the same serialization boundary as `dumps`/`loads`; using them is not a contract
+violation. The file stores class paths, empty initialization parameters and the
+socket connection, not runtime text or results. A missing/broken file fails,
+without constructing a replacement graph.
+
+The offline tests cover separate interpreter runs, exact final/intermediate
+values, a factory failure sentinel in load mode, rejection without the module
+allowance, and parsed YAML contents. They also distinguish a successful JSON diff
+from two failed commands producing empty output: each process must exit zero.
+
+The CLI accepts an optional positional text argument, defaulting to the #84
+fixture `"One   two\nthree"`. Both documented commands therefore work without
+supplying text, while callers can still provide their own input. The factory has
+an explicit `Pipeline` return annotation and the save/load help labels match the
+actual modes. No custom serialization hooks are needed by these stateless
+components. The #84 round trip and loading restrictions are covered by offline
+regression tests; this is not a claim about future RAG pipelines or week-level
+acceptance.

@@ -35,19 +35,24 @@ class WhitespaceNormalizer:
         return {"normalized_text": clean_text}
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def build_pipeline() -> Pipeline:
     pipeline = Pipeline()
-
-    text = """
-Nie  losowe — dwa małe komponenty demonstracyjne  z przewidywalnym wynikiem. Na przykład pierwszy normalizuje odstępy  w tekście, drugi
-dodaje stały prefiks. Bez  logiki RAG.
-"""
 
     pipeline.add_component("text_stats", TextStats())
     pipeline.add_component("normalizer", WhitespaceNormalizer())
     pipeline.add_component("normalized_text_stats", TextStats())
 
     pipeline.connect("normalizer", "normalized_text_stats")
+    return pipeline
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    text = """
+Nie  losowe — dwa małe komponenty demonstracyjne  z przewidywalnym wynikiem. Na przykład pierwszy normalizuje odstępy  w tekście, drugi
+dodaje stały prefiks. Bez  logiki RAG.
+"""
+
+    pipeline = build_pipeline()
 
     result = pipeline.run(
         data={"text_stats": {"text": text}, "normalizer": {"text": text}},

@@ -38,14 +38,19 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="""
 Run in two modes:
-    --save - builds pipeline, to hard drive and run test with provided text
-    --save - loads previously saved pipeline from hard drive and run test with provided text
+    --save - builds and saves the pipeline, then runs it with the provided text
+    --load - loads the saved pipeline, then runs it with the provided text
 """
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--save", type=str, help="Where to save pipeline yaml")
     group.add_argument("--load", type=str, help="Where from load pipeline yaml")
-    parser.add_argument("text", help="Text to analyze")
+    group.add_argument("--save", type=str, help="Where to save pipeline yaml")
+    parser.add_argument(
+        "text",
+        nargs="?",
+        default="One   two\nthree",
+        help="Text to analyze (default: %(default)s)",
+    )
 
     args = parser.parse_args(argv)
     if args.save is not None:

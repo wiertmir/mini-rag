@@ -35,7 +35,7 @@ class WhitespaceNormalizer:
         return {"normalized_text": clean_text}
 
 
-def build_pipeline():
+def build_pipeline() -> Pipeline:
     pipeline = Pipeline()
 
     pipeline.add_component("text_stats", TextStats())

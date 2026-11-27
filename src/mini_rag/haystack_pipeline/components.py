@@ -9,21 +9,14 @@ from rich_struct import print_obj
 class TextStats:
     """Counts words and lines in text."""
 
-    def __init__(self, lowercase: bool = True):
-        self.lowercase = lowercase
-
     @component.output_types(
         word_count=int,
         line_count=int,
         char_count=int,
     )
     def run(self, text: str) -> dict:
-        if self.lowercase:
-            processed = text.lower()
-        else:
-            processed = text
         return {
-            "word_count": len(processed.split()),
+            "word_count": len(text.split()),
             "line_count": len(text.strip().splitlines()),
             "char_count": len(text),
         }
@@ -56,7 +49,10 @@ dodaje stały prefiks. Bez  logiki RAG.
 
     pipeline.connect("normalizer", "normalized_text_stats")
 
-    result = pipeline.run(data={"text_stats": {"text": text}, "normalizer": {"text": text}})
+    result = pipeline.run(
+        data={"text_stats": {"text": text}, "normalizer": {"text": text}},
+        include_outputs_from={"normalizer"},
+    )
 
     print("\nNon-modified text:")
     print_obj(result["text_stats"])

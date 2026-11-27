@@ -5,9 +5,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, week-02-haystack]
   pull_request:
-    branches: [main]
+    branches: [main, week-02-haystack]
   workflow_dispatch:
 
 permissions:

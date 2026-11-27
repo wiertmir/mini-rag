@@ -1,5 +1,10 @@
 const START = '<!-- learning-card:start -->';
 const END = '<!-- learning-card:end -->';
+const releases = require('../learning-releases.json');
+
+function baseForIssue(number, defaultBranch) {
+  return releases.weeks.find(week => week.issues.includes(number))?.branch || defaultBranch;
+}
 
 function issueNumber(branch) {
   const match = /^(\d+)-/.exec(branch);
@@ -13,14 +18,17 @@ function doneWhen(body) {
     .map(line => line.replace(/^- \[[ xX]\] /, ''));
 }
 
-function managedBody(issue, oldBody = '') {
+function managedBody(issue, oldBody = '', {base, defaultBranch} = {}) {
   oldBody = oldBody || '';
   const completed = new Set(
     (oldBody.split(START)[1]?.split(END)[0] || '').split('\n')
       .filter(line => /^- \[[xX]\] /.test(line)).map(line => line.slice(6))
   );
   const criteria = doneWhen(issue.body);
-  const block = `${START}\n## Learning card\n\nCloses #${issue.number}\n\n` +
+  const weekly = base && base !== defaultBranch;
+  const link = weekly ? `Refs #${issue.number}` : `Closes #${issue.number}`;
+  const target = weekly ? `Target: \`${base}\`. After merge, Szpaner verifies evidence and closes the card explicitly; GitHub closing keywords do not close issues on a non-default base.\n\n` : '';
+  const block = `${START}\n## Learning card\n\n${link}\n\n${target}` +
     `Source: ${issue.html_url}\n\n## Done when (evidence required)\n\n` +
     (criteria.length ? criteria.map(text => `- [${completed.has(text) ? 'x' : ' '}] ${text}`).join('\n') :
       '- [ ] Review the issue contract and define measurable completion criteria.') +
@@ -41,19 +49,20 @@ async function syncPullRequest({github, context, core}) {
   const {data: issue} = await github.rest.issues.get({owner, repo, issue_number: number});
   if (issue.pull_request || issue.state !== 'open') return;
   const {data: metadata} = await github.rest.repos.get({owner, repo});
-  const base = metadata.default_branch;
+  const defaultBranch = metadata.default_branch;
+  const base = baseForIssue(number, defaultBranch);
   const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead({
     owner, repo, basehead: `${base}...${branch}`
   });
   // GitHub's Create branch starts at the base tip: wait for an actual commit.
   if (!comparison.ahead_by) return;
-  const {data: pulls} = await github.rest.pulls.list({owner, repo, state: 'open', head: `${owner}:${branch}`, base});
+  const {data: pulls} = await github.rest.pulls.list({owner, repo, state: 'open', head: `${owner}:${branch}`});
   let pr = pulls[0];
   if (pr) {
-    await github.rest.pulls.update({owner, repo, pull_number: pr.number, body: managedBody(issue, pr.body)});
+    await github.rest.pulls.update({owner, repo, pull_number: pr.number, base, body: managedBody(issue, pr.body, {base, defaultBranch})});
   } else {
     ({data: pr} = await github.rest.pulls.create({owner, repo, base, head: branch,
-      draft: true, title: `${issue.title} (#${number})`, body: managedBody(issue)}));
+      draft: true, title: `${issue.title} (#${number})`, body: managedBody(issue, '', {base, defaultBranch})}));
     // GITHUB_TOKEN-created PRs do not trigger pull_request workflows.
     await github.rest.actions.createWorkflowDispatch({owner, repo, workflow_id: 'ci.yml', ref: branch});
   }
@@ -87,6 +96,8 @@ async function requestAgent({github, context, core}) {
   if (!pr || pr.head.sha !== run.head_sha || pr.base.repo.full_name !== `${owner}/${repo}`) return;
   const {data: issue} = await github.rest.issues.get({owner, repo, issue_number: number});
   if (issue.pull_request || issue.state !== 'open') return;
+  const {data: metadata} = await github.rest.repos.get({owner, repo});
+  if (pr.base.ref !== baseForIssue(number, metadata.default_branch)) return;
   const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: pr.number});
   if (comments.some(c => c.user?.login === owner && c.body?.includes(`<!-- learning-agent:${run.head_sha} -->`))) return;
   await github.rest.issues.addAssignees({owner, repo, issue_number: pr.number, assignees: ['copilot-swe-agent[bot]']});
@@ -99,4 +110,4 @@ async function requestAgent({github, context, core}) {
   core.info(`Requested Copilot tests and checklist assessment for ${pr.html_url} at ${run.head_sha}`);
 }
 
-module.exports = {issueNumber, doneWhen, managedBody, agentPrompt, syncPullRequest, requestAgent};
+module.exports = {baseForIssue, issueNumber, doneWhen, managedBody, agentPrompt, syncPullRequest, requestAgent};

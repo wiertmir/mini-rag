@@ -36,7 +36,7 @@ sequenceDiagram
 2. Creating the branch at the current base tip does not open an empty PR.
    The first owner push with a commit ahead of its configured integration base creates a **draft PR**.
    The workflow copies the issue's `## Done when` checkboxes and links it with
-   `Refs #N` for Week 2. Its base is `week-02-haystack`, not `main`.
+   `Closes #N` as the final line, including for Week 2. Its base is `week-02-haystack`, not `main`.
    GitHub closing keywords only close issues on the default branch: after a
    weekly task PR is merged and evidence is verified, Szpaner closes its card
    explicitly. A push or a merge alone is not proof of completion.
@@ -65,6 +65,41 @@ sequenceDiagram
 A rapid sequence of pushes can queue follow-up requests while Copilot is still
 working. The agent must reassess the latest head and never force-push. Its
 checklist assessment remains reviewable evidence, not a deterministic proof.
+
+## Issue metadata on learning PRs
+
+The linked issue is the source for the PR milestone and project memberships:
+
+- **Milestone:** the trusted PR synchronizer copies the milestone on creation and
+  reconciles it on later owner pushes, including clearing it if removed from the
+  issue. The PR and CI are created before metadata writes, so a metadata error
+  does not hide the implementation or prevent CI from being dispatched.
+- **Projects v2:** the default-branch `Learning PR projects` workflow runs after a
+  successful `Learning PR` run. It rechecks the repository, owner, current head,
+  open issue/PR and expected weekly base, then adds the PR to every readable
+  source project, including memberships whose source item is archived. GitHub's
+  add-item mutation is idempotent: it returns an existing item instead of making
+  duplicates. It never removes unrelated PR projects or copies status/custom
+  field values or archive state.
+
+The second workflow runs from `main` even when the task branch contains an old
+push-workflow definition. It checks out only trusted default-branch scripts and
+never runs learner code with the user token.
+
+Project copying uses the existing **`LEARNING_AGENT_TOKEN`** secret, which needs
+access to the source issue and destination PR, plus **Projects read/write** for
+the user or organization owning those projects. For a classic PAT this is the
+`project` scope; read-only `read:project` cannot add items. Repository-only
+`GITHUB_TOKEN` cannot manage user/organization Projects v2. Missing visibility or
+permission fails the separate project-copy workflow explicitly; it must not be
+reported as a successful empty copy. Milestone and CI handling remain independent.
+
+For a local verification, the `gh` login also needs project access; its scopes
+are separate from the Actions secret. After merging the infrastructure change,
+check a real issue-branch run and its PR's milestone/project membership before
+claiming end-to-end success. Passing unit tests does not verify token permissions.
+
+Official reference: [Using the API to manage Projects](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects).
 
 ## Base selection and weekly handoff
 
@@ -110,6 +145,8 @@ for starting cloud-agent tasks. Do not copy a broad local CLI token into Actions
 Create a fine-grained, expiring personal access token restricted to
 `wiertmir/mini-rag`, with the permissions required by GitHub's agent-assignment
 API: metadata read, and Actions, Contents, Issues and Pull requests read/write.
+To copy project memberships with the same token, also grant Projects read/write
+for the project owner, as described above.
 Store it directly in the repository's Actions secrets as **`LEARNING_AGENT_TOKEN`**:
 [repository Actions secrets](https://github.com/wiertmir/mini-rag/settings/secrets/actions).
 The workflow uses it only for GitHub API requests, never exposes it to the

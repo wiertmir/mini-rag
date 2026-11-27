@@ -19,25 +19,25 @@ function doneWhen(body) {
 }
 
 function managedBody(issue, oldBody = '', {base, defaultBranch} = {}) {
-  oldBody = oldBody || '';
+  oldBody = (oldBody || '').replace(new RegExp(`^(?:Closes|Refs) #${issue.number}[\\t ]*\\r?$`, 'gmi'), '');
+  const finish = body => `${body.trimEnd()}\n\nCloses #${issue.number}`;
   const completed = new Set(
-    (oldBody.split(START)[1]?.split(END)[0] || '').split('\n')
+    (oldBody.split(START)[1]?.split(END)[0] || '').split(/\r?\n/)
       .filter(line => /^- \[[xX]\] /.test(line)).map(line => line.slice(6))
   );
   const criteria = doneWhen(issue.body);
   const weekly = base && base !== defaultBranch;
-  const link = weekly ? `Refs #${issue.number}` : `Closes #${issue.number}`;
   const target = weekly ? `Target: \`${base}\`. After merge, Szpaner verifies evidence and closes the card explicitly; GitHub closing keywords do not close issues on a non-default base.\n\n` : '';
-  const block = `${START}\n## Learning card\n\n${link}\n\n${target}` +
+  const block = `${START}\n## Learning card\n\n${target}` +
     `Source: ${issue.html_url}\n\n## Done when (evidence required)\n\n` +
     (criteria.length ? criteria.map(text => `- [${completed.has(text) ? 'x' : ' '}] ${text}`).join('\n') :
       '- [ ] Review the issue contract and define measurable completion criteria.') +
     `\n\nA push is not proof of completion. The test agent checks criteria only with code/test/artifact evidence.\n${END}`;
   if (oldBody.includes(START) && oldBody.includes(END)) {
     const begin = oldBody.indexOf(START), end = oldBody.indexOf(END) + END.length;
-    return oldBody.slice(0, begin) + block + oldBody.slice(end);
+    return finish(oldBody.slice(0, begin) + block + oldBody.slice(end));
   }
-  return `${oldBody || '## What changed\n\nImplementation of the linked learning card; see the diff and checklist.'}\n\n${block}`;
+  return finish(`${oldBody || '## What changed\n\nImplementation of the linked learning card; see the diff and checklist.'}\n\n${block}`);
 }
 
 async function syncPullRequest({github, context, core}) {

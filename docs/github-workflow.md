@@ -36,7 +36,7 @@ sequenceDiagram
 2. Creating the branch at the current base tip does not open an empty PR.
    The first owner push with a commit ahead of its configured integration base creates a **draft PR**.
    The workflow copies the issue's `## Done when` checkboxes and links it with
-   `Refs #N` for Week 2. Its base is `week-02-haystack`, not `main`.
+   `Closes #N` as the final line, including for Week 2. Its base is `week-02-haystack`, not `main`.
    GitHub closing keywords only close issues on the default branch: after a
    weekly task PR is merged and evidence is verified, Szpaner closes its card
    explicitly. A push or a merge alone is not proof of completion.

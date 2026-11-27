@@ -35,8 +35,10 @@ assignment or screenshot is required for machine-verifiable outcomes.
    its status label and updates its parent. A non-default-base merge does not
    automatically close an issue, even if the body contains `Closes #N`.
 
-The retained `Refs #N` link in the managed PR body is a navigation link, not an
-approval or completion signal.
+Every issue-linked PR description ends with `Closes #N`. The managed body keeps
+that single footer last on creation and refresh, preserving author notes and
+checked evidence. On a weekly base it is a reference, not an approval or automatic
+completion signal; closing keywords only auto-close issues on the default branch.
 
 ## Release gate and next-week handoff
 

@@ -66,8 +66,11 @@ values, a factory failure sentinel in load mode, rejection without the module
 allowance, and parsed YAML contents. They also distinguish a successful JSON diff
 from two failed commands producing empty output: each process must exit zero.
 
-At the reviewed implementation, CLI text is a required positional argument.
-The explicit-input round trip works, but the fixed-input commands in issue #84
-omit that argument and fail. This remains a review finding, not a claim that
-all #84 acceptance criteria have passed. No custom serialization hooks are
-needed by the current stateless components.
+The CLI accepts an optional positional text argument, defaulting to the #84
+fixture `"One   two\nthree"`. Both documented commands therefore work without
+supplying text, while callers can still provide their own input. The factory has
+an explicit `Pipeline` return annotation and the save/load help labels match the
+actual modes. No custom serialization hooks are needed by these stateless
+components. The #84 round trip and loading restrictions are covered by offline
+regression tests; this is not a claim about future RAG pipelines or week-level
+acceptance.

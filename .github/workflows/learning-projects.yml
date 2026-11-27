@@ -1,0 +1,32 @@
+name: Learning PR projects
+
+# Runs from the default branch even when an issue branch has an older push workflow.
+on:
+  workflow_run:
+    workflows: [Learning PR]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: learning-projects-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.actor.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/github-script@v8
+        with:
+          # A missing/insufficient user token fails explicitly, never claims a copy.
+          github-token: ${{ secrets.LEARNING_AGENT_TOKEN || github.token }}
+          script: |
+            const {copyProjectsAfterSync} = require('./.github/scripts/learning-workflow.cjs');
+            await copyProjectsAfterSync({github, context});

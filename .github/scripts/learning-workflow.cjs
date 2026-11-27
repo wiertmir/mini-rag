@@ -66,7 +66,66 @@ async function syncPullRequest({github, context, core}) {
     // GITHUB_TOKEN-created PRs do not trigger pull_request workflows.
     await github.rest.actions.createWorkflowDispatch({owner, repo, workflow_id: 'ci.yml', ref: branch});
   }
+  const milestone = issue.milestone?.number ?? null;
+  if ((pr.milestone?.number ?? null) !== milestone) {
+    await github.rest.issues.update({owner, repo, issue_number: pr.number, milestone});
+  }
   core.info(`Learning PR: ${pr.html_url}`);
+}
+
+// Projects v2 uses a user/app token with project access, not the repository token.
+async function projectMemberships(github, id) {
+  const ids = new Set();
+  let after = null;
+  do {
+    const data = await github.graphql(`query($id:ID!,$after:String){
+      node(id:$id){
+        ... on Issue{projectItems(first:100,after:$after,includeArchived:true){nodes{project{id}} pageInfo{hasNextPage endCursor}}}
+      }
+    }`, {id, after});
+    const items = data.node?.projectItems;
+    if (!items) throw new Error('Cannot read issue/PR Projects v2 memberships; check token visibility and Projects permissions.');
+    for (const item of items.nodes) {
+      if (!item?.project?.id) throw new Error('A project membership is inaccessible; check Projects permissions.');
+      ids.add(item.project.id);
+    }
+    if (!items.pageInfo.hasNextPage) break;
+    after = items.pageInfo.endCursor;
+    if (!after) throw new Error('Projects pagination returned no continuation cursor.');
+  } while (true);
+  return ids;
+}
+
+async function copyIssueProjects({github, issueNodeId, pullNodeId}) {
+  try {
+    const source = await projectMemberships(github, issueNodeId);
+    if (!source.size) return;
+    for (const projectId of source) {
+      // GitHub returns the existing item when the PR is already in this project.
+      await github.graphql(`mutation($projectId:ID!,$contentId:ID!){
+        addProjectV2ItemById(input:{projectId:$projectId,contentId:$contentId}){item{id}}
+      }`, {projectId, contentId: pullNodeId});
+    }
+  } catch (error) {
+    throw new Error('Project membership copy failed. LEARNING_AGENT_TOKEN needs access to the issue/PR and Projects read/write for the project owner. ' + error.message);
+  }
+}
+
+async function copyProjectsAfterSync({github, context}) {
+  const {owner, repo} = context.repo;
+  const run = context.payload.workflow_run;
+  const number = issueNumber(run.head_branch || '');
+  if (!number || run.conclusion !== 'success' || run.head_repository?.full_name !== `${owner}/${repo}` || run.actor?.login !== owner) return;
+  const {data: branch} = await github.rest.repos.getBranch({owner, repo, branch: run.head_branch});
+  if (branch.commit.sha !== run.head_sha) return;
+  const {data: pulls} = await github.rest.pulls.list({owner, repo, state: 'open', head: `${owner}:${run.head_branch}`});
+  const pr = pulls[0];
+  if (!pr || pr.head.sha !== run.head_sha || pr.base.repo.full_name !== `${owner}/${repo}`) return;
+  const {data: issue} = await github.rest.issues.get({owner, repo, issue_number: number});
+  if (issue.pull_request || issue.state !== 'open') return;
+  const {data: metadata} = await github.rest.repos.get({owner, repo});
+  if (pr.base.ref !== baseForIssue(number, metadata.default_branch)) return;
+  await copyIssueProjects({github, issueNodeId: issue.node_id, pullNodeId: pr.node_id});
 }
 
 function agentPrompt({issue, pr, sha}) {
@@ -110,4 +169,4 @@ async function requestAgent({github, context, core}) {
   core.info(`Requested Copilot tests and checklist assessment for ${pr.html_url} at ${run.head_sha}`);
 }
 
-module.exports = {baseForIssue, issueNumber, doneWhen, managedBody, agentPrompt, syncPullRequest, requestAgent};
+module.exports = {copyProjectsAfterSync, copyIssueProjects, baseForIssue, issueNumber, doneWhen, managedBody, agentPrompt, syncPullRequest, requestAgent};

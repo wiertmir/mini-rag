@@ -18,7 +18,7 @@ dependencies = [
     "pypdf==7.2",
     "rich==15.0",
     "rich-argparse==1.8",
-    "rich-struct[log]==0.16.1",
+    "rich-struct[log]",
     "tiktoken==0.14",    
 ]
 
@@ -45,4 +45,5 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [tool.ruff.lint]
+extend-select = ["I"]
 ignore = ["PLE1205"]

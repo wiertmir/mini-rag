@@ -1,7 +1,7 @@
 # mini-rag
 
 A plain-Python RAG over IPCC PDFs. The week-1 implementation is the reference
-for the Haystack comparison in week 2. See [evaluation results](evaluation_results.md)
+for the Haystack comparison in week 2. See [evaluation results](eval/evaluation_results.md)
 for measured results and known limitations.
 
 ## How the current system works
@@ -118,7 +118,7 @@ flowchart LR
         SR[("retrieval_smoke.jsonl + retrieval_smoke_summary.json")]
         BR[("baseline.jsonl + baseline_summary.json")]
     end
-    Report["evaluation_results.md: interpretation and limitations"]
+    Report["eval/evaluation_results.md: interpretation and limitations"]
     Q -->|"question IDs, text and expected documents"| Smoke
     Q -->|"same benchmark contract"| Baseline
     Cache -->|"validated index and provenance"| Smoke
@@ -505,7 +505,7 @@ The current saved OpenAI run in PR #74 matches the current dataset, prompt and
 local chunk fingerprints. Its 72 citation document/page ranges match the local
 chunks. This is a new run, not a retroactive correction of the historical PR #72
 artifact. Seven answer runs (210 records) are analyzed in
-[evaluation_results.md](evaluation_results.md), including metric limitations,
+[evaluation_results.md](eval/evaluation_results.md), including metric limitations,
 local-model trade-offs, source checks and follow-up issues.
 
 **Review status:** approved after re-review of `4b0ffdd`. Both output files are

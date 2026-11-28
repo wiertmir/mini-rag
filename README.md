@@ -4,6 +4,10 @@ A plain-Python RAG over IPCC PDFs. The week-1 implementation is the reference
 for the Haystack comparison in week 2. See [evaluation results](eval/evaluation_results.md)
 for measured results and known limitations.
 
+Week 2 design: [component map and migration decisions](docs/haystack-component-map.md)
+and [planned indexing/query pipelines](docs/haystack-pipelines.md). These describe
+the agreed Haystack port, not a completed replacement for the runtime below.
+
 ## How the current system works
 
 These diagrams describe the implemented plain-Python system, not a task order.
